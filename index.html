@@ -124,7 +124,7 @@
             gap: 8px;
             margin: 10px 0;
         }
-        input {
+        input, select {
             background: #1b2233;
             border: 1px solid #4f6191;
             color: white;
@@ -266,8 +266,9 @@
             font-size: 1.5rem;
             font-weight: bold;
         }
-        /* Убираем скролл страницы */
-        .no-scroll { overflow: hidden; }
+        .board-size-selector {
+            margin: 12px 0;
+        }
     </style>
 </head>
 <body>
@@ -305,6 +306,14 @@
         <div id="create-panel" class="hidden">
             <div class="input-group">
                 <input type="text" id="create-room-name" placeholder="Название комнаты" maxlength="20">
+            </div>
+            <div class="board-size-selector">
+                <select id="board-size-select">
+                    <option value="9">9x9 (только 1x1 или 3x3 по 1 игроку)</option>
+                    <option value="12">12x12</option>
+                    <option value="15" selected>15x15</option>
+                    <option value="20">20x20</option>
+                </select>
             </div>
             <div class="team-selector" id="create-team-selector"></div>
             <div class="action-buttons">
@@ -360,7 +369,6 @@
 
 <script>
     (function(){
-        // Отключаем контекстное меню, зум, скролл
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.addEventListener('gesturestart', e => e.preventDefault());
         document.addEventListener('touchmove', e => { if (e.target.tagName !== 'INPUT') e.preventDefault(); }, { passive: false });
@@ -489,7 +497,21 @@
             const mode = roomInfo.mode;
             const maxPerTeam = { '1x1':1, '2x2':2, '3x3':3 }[mode];
             const occupied = roomInfo.occupied || { X:0, O:0, T:0 };
-            const availableTeams = mode === '2x2' ? ['X','O'] : ['X','O','T'];
+            // Определяем доступные команды согласно правилам
+            let availableTeams = ['X','O','T'];
+            if (mode === '2x2') {
+                // Если одна команда полностью заполнена (2 игрока) и другая имеет хотя бы одного игрока,
+                // то третья команда становится недоступной.
+                const fullTeams = Object.entries(occupied).filter(([_,count]) => count === 2).map(([t])=>t);
+                const startedTeams = Object.entries(occupied).filter(([_,count]) => count > 0).map(([t])=>t);
+                if (fullTeams.length === 1 && startedTeams.length >= 2) {
+                    // Третья команда недоступна
+                    availableTeams = startedTeams;
+                }
+            } else if (mode === '3x3') {
+                // В 3x3 все команды доступны всегда (если не заполнены)
+                // Никаких ограничений
+            }
             availableTeams.forEach(t => {
                 const div = document.createElement('div');
                 div.className = 'team-option';
@@ -507,36 +529,41 @@
         }
         
         let selectedCell = null;
+        let cellSize = 50; // default for 9x9
+        
         function renderGame() {
             if(!gameState) return;
+            const boardSize = gameState.boardSize || 9;
+            cellSize = 450 / boardSize;
             ctx.clearRect(0,0,450,450);
             // сетка
             ctx.strokeStyle = '#4e6190';
             ctx.lineWidth = 2;
-            for(let i=1;i<9;i++) {
+            for(let i=1;i<boardSize;i++) {
                 ctx.beginPath();
-                ctx.moveTo(i*50,0); ctx.lineTo(i*50,450);
-                ctx.moveTo(0,i*50); ctx.lineTo(450,i*50);
+                ctx.moveTo(i*cellSize, 0); ctx.lineTo(i*cellSize, 450);
+                ctx.moveTo(0, i*cellSize); ctx.lineTo(450, i*cellSize);
                 ctx.stroke();
             }
-            // символы
             const board = gameState.board;
-            for(let y=0;y<9;y++) for(let x=0;x<9;x++) {
+            for(let y=0;y<boardSize;y++) for(let x=0;x<boardSize;x++) {
                 const cell = board[y][x];
                 if(!cell) continue;
-                const cx = x*50+25, cy = y*50+25;
-                if(cell === 'X') drawCross(cx,cy, getTeamColor('X'));
-                else if(cell === 'O') drawCircle(cx,cy, getTeamColor('O'));
-                else if(cell === 'T') drawTriangle(cx,cy, getTeamColor('T'));
+                const cx = x*cellSize + cellSize/2;
+                const cy = y*cellSize + cellSize/2;
+                const size = cellSize * 0.6;
+                if(cell === 'X') drawCross(cx, cy, getTeamColor('X'), size);
+                else if(cell === 'O') drawCircle(cx, cy, getTeamColor('O'), size);
+                else if(cell === 'T') drawTriangle(cx, cy, getTeamColor('T'), size);
             }
-            // зачёркивания (поверх символов)
-            ctx.lineWidth = 6;
+            // зачёркивания
+            ctx.lineWidth = Math.max(4, cellSize/8);
             ctx.strokeStyle = '#f0e68c';
             if(gameState.lines) {
                 gameState.lines.forEach(line => {
                     ctx.beginPath();
-                    ctx.moveTo(line.x1*50+25, line.y1*50+25);
-                    ctx.lineTo(line.x2*50+25, line.y2*50+25);
+                    ctx.moveTo(line.x1*cellSize + cellSize/2, line.y1*cellSize + cellSize/2);
+                    ctx.lineTo(line.x2*cellSize + cellSize/2, line.y2*cellSize + cellSize/2);
                     ctx.stroke();
                 });
             }
@@ -544,11 +571,13 @@
             if(!gameEnded && gameState.currentTurn === myTeam && gameState.turnPlayer === myPlayerId && selectedCell) {
                 const {x,y} = selectedCell;
                 if(!gameState.blockedCells || !gameState.blockedCells[`${x},${y}`]) {
-                    const cx = x*50+25, cy = y*50+25;
+                    const cx = x*cellSize + cellSize/2;
+                    const cy = y*cellSize + cellSize/2;
                     ctx.globalAlpha = 0.5;
-                    if(myTeam==='X') drawCross(cx,cy,getTeamColor('X'));
-                    else if(myTeam==='O') drawCircle(cx,cy,getTeamColor('O'));
-                    else drawTriangle(cx,cy,getTeamColor('T'));
+                    const size = cellSize * 0.6;
+                    if(myTeam==='X') drawCross(cx,cy,getTeamColor('X'), size);
+                    else if(myTeam==='O') drawCircle(cx,cy,getTeamColor('O'), size);
+                    else drawTriangle(cx,cy,getTeamColor('T'), size);
                     ctx.globalAlpha = 1.0;
                 }
             }
@@ -557,18 +586,18 @@
             document.getElementById('move-controls').classList.toggle('hidden', !isMyTurn || !selectedCell);
         }
         
-        function drawCross(cx,cy,color){
-            ctx.strokeStyle=color; ctx.lineWidth=5;
-            ctx.beginPath(); ctx.moveTo(cx-15,cy-15); ctx.lineTo(cx+15,cy+15);
-            ctx.moveTo(cx+15,cy-15); ctx.lineTo(cx-15,cy+15); ctx.stroke();
+        function drawCross(cx,cy,color,size){
+            ctx.strokeStyle=color; ctx.lineWidth=Math.max(3, size/8);
+            ctx.beginPath(); ctx.moveTo(cx-size/2, cy-size/2); ctx.lineTo(cx+size/2, cy+size/2);
+            ctx.moveTo(cx+size/2, cy-size/2); ctx.lineTo(cx-size/2, cy+size/2); ctx.stroke();
         }
-        function drawCircle(cx,cy,color){
-            ctx.strokeStyle=color; ctx.lineWidth=5;
-            ctx.beginPath(); ctx.arc(cx,cy,16,0,2*Math.PI); ctx.stroke();
+        function drawCircle(cx,cy,color,size){
+            ctx.strokeStyle=color; ctx.lineWidth=Math.max(3, size/8);
+            ctx.beginPath(); ctx.arc(cx,cy,size/2,0,2*Math.PI); ctx.stroke();
         }
-        function drawTriangle(cx,cy,color){
-            ctx.strokeStyle=color; ctx.lineWidth=5;
-            ctx.beginPath(); ctx.moveTo(cx,cy-18); ctx.lineTo(cx+16,cy+12); ctx.lineTo(cx-16,cy+12); ctx.closePath(); ctx.stroke();
+        function drawTriangle(cx,cy,color,size){
+            ctx.strokeStyle=color; ctx.lineWidth=Math.max(3, size/8);
+            ctx.beginPath(); ctx.moveTo(cx, cy-size/2); ctx.lineTo(cx+size/2, cy+size/3); ctx.lineTo(cx-size/2, cy+size/3); ctx.closePath(); ctx.stroke();
         }
         
         function showGameResult() {
@@ -638,9 +667,10 @@
             if(!roomName) return alert('Введите название');
             const selected = document.querySelector('#create-team-selector .team-option.selected');
             if(!selected) return alert('Выберите команду');
+            const boardSize = parseInt(document.getElementById('board-size-select').value);
             nickname = document.getElementById('nickname').value.trim() || 'Ник';
             localStorage.setItem('nick', nickname);
-            send({ type:'create', payload:{ mode:selectedMode, roomName, team: selected.dataset.team, nick:nickname } });
+            send({ type:'create', payload:{ mode:selectedMode, roomName, team: selected.dataset.team, boardSize, nick:nickname } });
         });
         document.getElementById('confirm-join').addEventListener('click', ()=>{
             const roomName = document.getElementById('join-room-name').value.trim();
@@ -661,9 +691,11 @@
             if(gameEnded || !gameState || gameState.currentTurn !== myTeam || gameState.turnPlayer !== myPlayerId) return;
             const rect = canvas.getBoundingClientRect();
             const scale = canvas.width / rect.width;
-            const x = Math.floor((e.clientX - rect.left) * scale / 50);
-            const y = Math.floor((e.clientY - rect.top) * scale / 50);
-            if(x<0||x>8||y<0||y>8) return;
+            const boardSize = gameState.boardSize || 9;
+            const cellSize = 450 / boardSize;
+            const x = Math.floor((e.clientX - rect.left) * scale / cellSize);
+            const y = Math.floor((e.clientY - rect.top) * scale / cellSize);
+            if(x<0||x>=boardSize||y<0||y>=boardSize) return;
             if(gameState.board[y][x] !== null) return;
             if(gameState.blockedCells && gameState.blockedCells[`${x},${y}`]) return;
             selectedCell = {x,y};
