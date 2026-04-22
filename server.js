@@ -72,14 +72,6 @@ function startGame(room) {
     const teamPlayers = {};
     teamsPresent.forEach(t => { teamPlayers[t] = players.filter(p=>p.team===t).map(p=>p.id); });
     
-    // Проверка равного количества игроков в командах для 3x3
-    if (room.mode === '3x3') {
-        const counts = teamsPresent.map(t => teamPlayers[t].length);
-        if (new Set(counts).size > 1) {
-            // ошибка, но мы не должны сюда попадать, т.к. при старте уже проверили
-        }
-    }
-    
     const boardSize = room.boardSize;
     const game = {
         board: Array(boardSize).fill().map(()=>Array(boardSize).fill(null)),
@@ -151,12 +143,8 @@ wss.on('connection', (ws) => {
 
         if(type === 'create') {
             const { mode, roomName, team, boardSize, nick } = payload;
-            // Проверка ограничения для 9x9
-            if (boardSize === 9) {
-                if (!(mode === '1x1' || (mode === '3x3'))) {
-                    return ws.send(JSON.stringify({ type:'error', payload:{message:'9x9 доступно только в 1x1 или 3x3 (по 1 игроку)'} }));
-                }
-                // Для 3x3 дополнительно проверим при старте, что игроков по 1
+            if (boardSize === 9 && mode !== '1x1') {
+                return ws.send(JSON.stringify({ type:'error', payload:{message:'9x9 доступно только в режиме 1x1'} }));
             }
             const roomId = genId();
             const room = {
@@ -184,7 +172,6 @@ wss.on('connection', (ws) => {
             const room = [...rooms.values()].find(r => r.name === roomName && !r.game);
             if(!room) return ws.send(JSON.stringify({ type:'error', payload:{message:'Комната не найдена'} }));
             const maxPerTeam = { '1x1':1, '2x2':2, '3x3':3 }[room.mode];
-            // Проверка доступности команды по правилам
             const occupied = { X:0, O:0, T:0 };
             Object.values(room.players).forEach(p => occupied[p.team]++);
             let availableTeams = ['X','O','T'];
@@ -201,8 +188,6 @@ wss.on('connection', (ws) => {
             if(occupied[team] >= maxPerTeam) {
                 return ws.send(JSON.stringify({ type:'error', payload:{message:'Команда заполнена'} }));
             }
-            // Для 3x3 проверка равного количества игроков (при старте)
-            // Сейчас можно входить в любую команду, но при нажатии "начать" проверим
             const playerId = genId();
             room.players[playerId] = { id: playerId, nick, team, ready: false };
             ws.roomId = room.id;
@@ -216,24 +201,15 @@ wss.on('connection', (ws) => {
             const player = room.players[ws.playerData.id];
             player.ready = !player.ready;
             broadcastRoom(ws.roomId, { type:'room_update', payload: getRoomPublic(room) });
-            // Проверка возможности старта
             const players = Object.values(room.players);
             const allReady = players.every(p=>p.ready);
             const enoughPlayers = players.length === room.maxSlots;
             let canStart = allReady && enoughPlayers;
             if (room.mode === '3x3' && canStart) {
-                // Проверка равного количества игроков в командах
                 const counts = { X:0, O:0, T:0 };
                 players.forEach(p => counts[p.team]++);
                 const activeTeams = Object.values(counts).filter(c => c > 0);
                 if (new Set(activeTeams).size > 1) {
-                    canStart = false;
-                    // Отправим ошибку создателю? Просто не стартуем
-                }
-            }
-            // Доп. проверка для 9x9 в 3x3: должно быть ровно 3 игрока (по 1 в команде)
-            if (room.boardSize === 9 && room.mode === '3x3') {
-                if (players.length !== 3 || !players.every(p => counts[p.team] === 1)) {
                     canStart = false;
                 }
             }
