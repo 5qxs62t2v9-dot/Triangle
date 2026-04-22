@@ -2,48 +2,75 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#1a1e2c">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Triangle</title>
     <style>
-        * { box-sizing: border-box; user-select: none; }
-        body {
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+        }
+        html, body {
             margin: 0;
+            padding: 0;
+            width: 100%;
             min-height: 100vh;
-            background: linear-gradient(145deg, #1a1e2c 0%, #2a2f42 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            background: #1a1e2c;
+            overflow: hidden;
+            position: fixed;
+            inset: 0;
+        }
+        body {
             font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
             color: #eef2fb;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            background: linear-gradient(145deg, #1a1e2c 0%, #2a2f42 100%);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
         #app {
             width: 100%;
             max-width: 700px;
-            background: rgba(20, 25, 40, 0.8);
-            backdrop-filter: blur(12px);
-            border-radius: 48px;
-            padding: 24px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
-            border: 1px solid #3d4a6b;
-            margin: 16px;
+            margin: 0 auto;
+            padding: 20px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-height: 100vh;
         }
-        .screen { display: flex; flex-direction: column; gap: 20px; }
-        h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: 1px; }
+        .screen {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+        }
+        h1, h2, h3 {
+            margin: 0;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-align: center;
+        }
         h1 {
             font-size: 3.8rem;
-            text-align: center;
             background: linear-gradient(135deg, #a6c1ff, #c0b3ff);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
             text-shadow: 0 4px 12px rgba(0,20,80,0.5);
+            margin-top: 20px;
         }
         .nickname-row {
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #1f2538;
+            background: rgba(31, 37, 56, 0.8);
+            backdrop-filter: blur(8px);
             padding: 8px 20px;
             border-radius: 60px;
             border: 1px solid #4a5670;
@@ -71,28 +98,33 @@
             color: white;
             font-weight: bold;
             font-size: 1.2rem;
-            padding: 14px 28px;
+            padding: 14px 20px;
             border-radius: 40px;
             cursor: pointer;
-            box-shadow: 0 6px 0 #121724;
+            box-shadow: 0 4px 0 #121724;
             transition: all 0.08s;
             border: 1px solid #61739e;
             flex: 1;
             text-align: center;
+            -webkit-tap-highlight-color: transparent;
         }
         .btn.small { padding: 10px 16px; font-size: 1rem; }
-        .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #121724; }
+        .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #121724; }
         .btn:disabled { opacity: 0.5; transform: none; box-shadow: 0 4px 0 #121724; pointer-events: none; }
         .btn.primary { background: #5f7dcf; border-color: #a3bbff; }
         .btn.warning { background: #b55a5a; border-color: #e68a8a; }
-        .lobby-actions, .room-actions { display: flex; gap: 15px; flex-wrap: wrap; }
+        .lobby-actions, .room-actions {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
         .input-group {
             display: flex;
             flex-direction: column;
             gap: 8px;
             margin: 10px 0;
         }
-        input, select {
+        input {
             background: #1b2233;
             border: 1px solid #4f6191;
             color: white;
@@ -144,9 +176,8 @@
             padding: 10px 12px;
             border-bottom: 1px solid #334十五;
         }
-        .player-nick {
-            flex: 1;
-        }
+        .player-item:last-child { border-bottom: none; }
+        .player-nick { flex: 1; }
         .player-team-icon svg {
             width: 24px;
             height: 24px;
@@ -158,7 +189,12 @@
             font-weight: bold;
             font-size: 1.3rem;
         }
-        .game-header { display: flex; align-items: center; gap: 15px; }
+        .game-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
         .back-btn {
             background: none;
             border: none;
@@ -166,8 +202,12 @@
             cursor: pointer;
             color: #b0c2f0;
             padding: 0 10px;
+            line-height: 1;
         }
-        .game-canvas-container { display: flex; justify-content: center; }
+        .game-canvas-container {
+            display: flex;
+            justify-content: center;
+        }
         canvas {
             background: #111725;
             border-radius: 24px;
@@ -182,7 +222,11 @@
             font-weight: bold;
             padding: 8px;
         }
-        .move-actions { display: flex; gap: 20px; justify-content: center; }
+        .move-actions {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
         .stats {
             display: flex;
             justify-content: space-around;
@@ -191,12 +235,39 @@
             padding: 16px;
         }
         .hidden { display: none !important; }
-        .flex-row { display: flex; gap: 12px; align-items: center; }
+        .flex-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
         .action-buttons {
             display: flex;
             gap: 12px;
             margin-top: 8px;
         }
+        .result-table {
+            background: #1e2538;
+            border-radius: 24px;
+            padding: 16px;
+            margin-top: 10px;
+        }
+        .result-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+        }
+        .result-team {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .result-score {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        /* Убираем скролл страницы */
+        .no-scroll { overflow: hidden; }
     </style>
 </head>
 <body>
@@ -283,13 +354,17 @@
             <button class="btn small" id="move-cancel">Отмена</button>
             <button class="btn small primary" id="move-ok">OK</button>
         </div>
-        <div id="game-result" class="hidden" style="text-align:center;"></div>
+        <div id="game-result" class="result-table hidden"></div>
     </div>
 </div>
 
 <script>
     (function(){
-        // ---------- SVG иконки ----------
+        // Отключаем контекстное меню, зум, скролл
+        document.addEventListener('contextmenu', e => e.preventDefault());
+        document.addEventListener('gesturestart', e => e.preventDefault());
+        document.addEventListener('touchmove', e => { if (e.target.tagName !== 'INPUT') e.preventDefault(); }, { passive: false });
+        
         const SVG = {
             cross: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#5b9aff" stroke-width="3" stroke-linecap="round"><line x1="4" y1="4" x2="20" y2="20"/><line x1="20" y1="4" x2="4" y2="20"/></svg>`,
             circle: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#ff7b7b" stroke-width="3"><circle cx="12" cy="12" r="8"/></svg>`,
@@ -299,7 +374,6 @@
         function getTeamName(team){ return team==='X'?'Крестики':team==='O'?'Кружочки':'Треугольники'; }
         function getTeamIcon(team) { return team==='X'?SVG.cross:team==='O'?SVG.circle:SVG.triangle; }
 
-        // ---------- Глобальные переменные ----------
         let ws = null;
         let currentScreen = 'menu';
         let nickname = localStorage.getItem('nick') || 'Ник';
@@ -309,6 +383,7 @@
         let myPlayerId = null;
         let myTeam = null;
         let gameState = null;
+        let gameEnded = false;
         
         let stats = JSON.parse(localStorage.getItem('triangle_stats')) || {'1x1':[0,0],'2x2':[0,0],'3x3':[0,0]};
         
@@ -322,11 +397,11 @@
             game: document.getElementById('game-screen')
         };
         
-        // ---------- Вспомогательные функции ----------
         function showScreen(name) {
             Object.values(screens).forEach(s => s.classList.add('hidden'));
             screens[name].classList.remove('hidden');
             currentScreen = name;
+            gameEnded = false;
         }
         
         function updateStatsDisplay() {
@@ -337,7 +412,6 @@
         function addWin(mode) { stats[mode][0]++; localStorage.setItem('triangle_stats', JSON.stringify(stats)); updateStatsDisplay(); }
         function addLoss(mode) { stats[mode][1]++; localStorage.setItem('triangle_stats', JSON.stringify(stats)); updateStatsDisplay(); }
         
-        // Сохранение ника при изменении
         document.getElementById('nickname').addEventListener('input', (e) => {
             nickname = e.target.value.trim() || 'Ник';
             localStorage.setItem('nick', nickname);
@@ -346,11 +420,10 @@
         function connectWebSocket() {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${location.host}`);
-            ws.onopen = () => console.log('WebSocket connected');
+            ws.onopen = () => console.log('connected');
             ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
             ws.onclose = () => alert('Соединение потеряно');
         }
-        
         function send(data) { if(ws && ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify(data)); }
         
         function handleMessage(msg) {
@@ -367,62 +440,57 @@
                 updateJoinTeamSelector(payload);
             } else if(type === 'game_started') {
                 gameState = payload;
+                gameEnded = false;
                 showScreen('game');
-                document.getElementById('game-room-name').innerText = `Комната: ${payload.roomName || ''}`;
+                document.getElementById('game-room-name').innerText = payload.roomName || '';
                 renderGame();
             } else if(type === 'game_update') {
                 gameState = payload;
                 renderGame();
-                if(gameState.winner) showGameResult();
+                if(gameState.winner) {
+                    gameEnded = true;
+                    showGameResult();
+                }
             } else if(type === 'error') {
                 alert(payload.message);
             }
         }
         
-        // ---------- Рендер комнаты ожидания ----------
         function updateRoomUI(room) {
-            document.getElementById('room-title').innerText = `Комната: ${room.name}`;
+            document.getElementById('room-title').innerText = room.name;
             const maxSlots = { '1x1':2, '2x2':4, '3x3':9 }[room.mode];
             document.getElementById('room-players-count').innerText = `${Object.keys(room.players).length}/${maxSlots}`;
             const listDiv = document.getElementById('room-player-list');
             listDiv.innerHTML = '';
-            
             const teams = { X:[], O:[], T:[] };
             Object.values(room.players).forEach(p => teams[p.team].push(p));
-            
             ['X','O','T'].forEach(team => {
                 if(teams[team].length === 0) return;
                 const teamDiv = document.createElement('div');
-                teamDiv.style.marginTop = '12px';
-                teamDiv.style.marginBottom = '4px';
+                teamDiv.style.margin = '8px 0 4px';
                 teamDiv.style.display = 'flex';
                 teamDiv.style.alignItems = 'center';
                 teamDiv.style.gap = '8px';
                 teamDiv.innerHTML = `<span style="color:${getTeamColor(team)}; font-weight:bold;">${getTeamName(team)}</span> ${getTeamIcon(team)}`;
                 listDiv.appendChild(teamDiv);
-                
                 teams[team].forEach(p => {
                     const div = document.createElement('div');
                     div.className = 'player-item';
-                    div.innerHTML = `
-                        <span class="player-nick">${p.nick}</span>
-                        <span class="player-team-icon">${getTeamIcon(team)}</span>
-                        ${p.ready ? '<span class="ready-badge">✓</span>' : ''}
-                    `;
+                    div.innerHTML = `<span class="player-nick">${p.nick}</span><span class="player-team-icon">${getTeamIcon(team)}</span>${p.ready ? '<span class="ready-badge">✓</span>' : ''}`;
                     listDiv.appendChild(div);
                 });
             });
-            
             document.getElementById('room-ready-btn').disabled = false;
         }
         
         function updateJoinTeamSelector(roomInfo) {
             const container = document.getElementById('join-team-selector');
-            const teams = ['X','O','T'];
             container.innerHTML = '';
-            const maxPerTeam = { '1x1':1, '2x2':2, '3x3':3 }[roomInfo.mode];
+            const mode = roomInfo.mode;
+            const maxPerTeam = { '1x1':1, '2x2':2, '3x3':3 }[mode];
             const occupied = roomInfo.occupied || { X:0, O:0, T:0 };
-            teams.forEach(t => {
+            const availableTeams = mode === '2x2' ? ['X','O'] : ['X','O','T'];
+            availableTeams.forEach(t => {
                 const div = document.createElement('div');
                 div.className = 'team-option';
                 div.dataset.team = t;
@@ -438,11 +506,11 @@
             });
         }
         
-        // ---------- Игровое поле (canvas) ----------
         let selectedCell = null;
         function renderGame() {
             if(!gameState) return;
             ctx.clearRect(0,0,450,450);
+            // сетка
             ctx.strokeStyle = '#4e6190';
             ctx.lineWidth = 2;
             for(let i=1;i<9;i++) {
@@ -451,6 +519,7 @@
                 ctx.moveTo(0,i*50); ctx.lineTo(450,i*50);
                 ctx.stroke();
             }
+            // символы
             const board = gameState.board;
             for(let y=0;y<9;y++) for(let x=0;x<9;x++) {
                 const cell = board[y][x];
@@ -460,19 +529,7 @@
                 else if(cell === 'O') drawCircle(cx,cy, getTeamColor('O'));
                 else if(cell === 'T') drawTriangle(cx,cy, getTeamColor('T'));
             }
-            // временный символ
-            if(gameState.currentTurn === myTeam && gameState.turnPlayer === myPlayerId && selectedCell) {
-                const {x,y} = selectedCell;
-                if(gameState.board[y][x] === null) {
-                    const cx = x*50+25, cy = y*50+25;
-                    ctx.globalAlpha = 0.5;
-                    if(myTeam==='X') drawCross(cx,cy,getTeamColor('X'));
-                    else if(myTeam==='O') drawCircle(cx,cy,getTeamColor('O'));
-                    else drawTriangle(cx,cy,getTeamColor('T'));
-                    ctx.globalAlpha = 1.0;
-                }
-            }
-            // линии зачёркивания
+            // зачёркивания (поверх символов)
             ctx.lineWidth = 6;
             ctx.strokeStyle = '#f0e68c';
             if(gameState.lines) {
@@ -483,8 +540,20 @@
                     ctx.stroke();
                 });
             }
-            const isMyTurn = (gameState.currentTurn === myTeam && gameState.turnPlayer === myPlayerId);
-            document.getElementById('turn-indicator').innerText = isMyTurn ? 'Ваш ход' : 'Ход оппонента';
+            // временный символ
+            if(!gameEnded && gameState.currentTurn === myTeam && gameState.turnPlayer === myPlayerId && selectedCell) {
+                const {x,y} = selectedCell;
+                if(!gameState.blockedCells || !gameState.blockedCells[`${x},${y}`]) {
+                    const cx = x*50+25, cy = y*50+25;
+                    ctx.globalAlpha = 0.5;
+                    if(myTeam==='X') drawCross(cx,cy,getTeamColor('X'));
+                    else if(myTeam==='O') drawCircle(cx,cy,getTeamColor('O'));
+                    else drawTriangle(cx,cy,getTeamColor('T'));
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+            const isMyTurn = !gameEnded && gameState.currentTurn === myTeam && gameState.turnPlayer === myPlayerId;
+            document.getElementById('turn-indicator').innerText = isMyTurn ? 'Ваш ход' : (gameEnded ? 'Игра завершена' : 'Ход оппонента');
             document.getElementById('move-controls').classList.toggle('hidden', !isMyTurn || !selectedCell);
         }
         
@@ -505,40 +574,38 @@
         function showGameResult() {
             const resultDiv = document.getElementById('game-result');
             resultDiv.classList.remove('hidden');
-            if(gameState.winner === 'draw') resultDiv.innerText = 'Ничья!';
-            else {
-                const team = gameState.winner;
-                resultDiv.innerHTML = `Победила команда ${getTeamName(team)} ${getTeamIcon(team)}`;
-                if(team === myTeam) addWin(selectedMode); else addLoss(selectedMode);
-            }
+            const scores = gameState.scores;
+            const teams = Object.keys(scores).filter(t => scores[t] !== undefined);
+            let html = '';
+            teams.forEach(team => {
+                html += `<div class="result-row"><div class="result-team">${getTeamIcon(team)} ${getTeamName(team)}</div><div class="result-score">${scores[team]}</div></div>`;
+            });
+            if(gameState.winner === 'draw') html += '<div style="text-align:center; margin-top:10px;">Ничья!</div>';
+            else html += `<div style="text-align:center; margin-top:10px;">Победитель: ${getTeamName(gameState.winner)} ${getTeamIcon(gameState.winner)}</div>`;
+            resultDiv.innerHTML = html;
+            if(gameState.winner !== 'draw' && gameState.winner === myTeam) addWin(selectedMode);
+            else if(gameState.winner !== 'draw') addLoss(selectedMode);
         }
         
-        // ---------- Обработчики событий ----------
+        // Обработчики
         document.querySelectorAll('[data-mode]').forEach(btn => btn.addEventListener('click', (e) => {
             selectedMode = e.target.dataset.mode;
             document.getElementById('lobby-mode-title').innerText = selectedMode;
             showScreen('lobby');
             resetLobbyPanels();
         }));
-        
-        document.getElementById('stats-btn').addEventListener('click', ()=>{
-            document.getElementById('stats-panel').classList.toggle('hidden');
-        });
-        
-        document.getElementById('lobby-back').addEventListener('click', ()=>showScreen('menu'));
-        
+        document.getElementById('stats-btn').addEventListener('click', ()=> document.getElementById('stats-panel').classList.toggle('hidden'));
+        document.getElementById('lobby-back').addEventListener('click', ()=> showScreen('menu'));
         function resetLobbyPanels() {
             document.getElementById('create-panel').classList.add('hidden');
             document.getElementById('join-panel').classList.add('hidden');
             renderTeamSelector('create-team-selector');
             document.getElementById('join-team-selector').innerHTML = '';
         }
-        
         function renderTeamSelector(containerId) {
             const container = document.getElementById(containerId);
-            const teams = ['X','O','T'];
             container.innerHTML = '';
-            teams.forEach(t => {
+            ['X','O','T'].forEach(t => {
                 const div = document.createElement('div');
                 div.className = 'team-option';
                 div.dataset.team = t;
@@ -550,7 +617,6 @@
                 container.appendChild(div);
             });
         }
-        
         document.getElementById('create-room-btn').addEventListener('click', ()=>{
             document.getElementById('create-panel').classList.remove('hidden');
             document.getElementById('join-panel').classList.add('hidden');
@@ -562,58 +628,47 @@
         });
         document.getElementById('cancel-create').addEventListener('click', resetLobbyPanels);
         document.getElementById('cancel-join').addEventListener('click', resetLobbyPanels);
-        
         document.getElementById('check-room-btn').addEventListener('click', ()=>{
-            const roomName = document.getElementById('join-room-name').value.trim();
-            if(!roomName) return alert('Введите название');
-            send({ type:'check_room', payload: { roomName } });
+            const name = document.getElementById('join-room-name').value.trim();
+            if(!name) return alert('Введите название');
+            send({ type:'check_room', payload: { roomName: name } });
         });
-        
         document.getElementById('confirm-create').addEventListener('click', ()=>{
             const roomName = document.getElementById('create-room-name').value.trim();
             if(!roomName) return alert('Введите название');
             const selected = document.querySelector('#create-team-selector .team-option.selected');
             if(!selected) return alert('Выберите команду');
-            const team = selected.dataset.team;
             nickname = document.getElementById('nickname').value.trim() || 'Ник';
             localStorage.setItem('nick', nickname);
-            send({ type:'create', payload:{ mode:selectedMode, roomName, team, nick:nickname } });
+            send({ type:'create', payload:{ mode:selectedMode, roomName, team: selected.dataset.team, nick:nickname } });
         });
-        
         document.getElementById('confirm-join').addEventListener('click', ()=>{
             const roomName = document.getElementById('join-room-name').value.trim();
             if(!roomName) return alert('Введите название');
             const selected = document.querySelector('#join-team-selector .team-option.selected');
             if(!selected) return alert('Выберите команду');
-            const team = selected.dataset.team;
             nickname = document.getElementById('nickname').value.trim() || 'Ник';
             localStorage.setItem('nick', nickname);
-            send({ type:'join', payload:{ roomName, team, nick:nickname } });
+            send({ type:'join', payload:{ roomName, team: selected.dataset.team, nick:nickname } });
         });
-        
         document.getElementById('room-leave').addEventListener('click', ()=> { if(confirm('Выйти?')) { send({type:'leave_room'}); showScreen('lobby'); } });
         document.getElementById('room-leave-btn').addEventListener('click', ()=> { if(confirm('Выйти?')) { send({type:'leave_room'}); showScreen('lobby'); } });
-        document.getElementById('room-ready-btn').addEventListener('click', ()=>{
-            send({ type:'toggle_ready' });
-        });
-        
+        document.getElementById('room-ready-btn').addEventListener('click', ()=> send({ type:'toggle_ready' }));
         document.getElementById('game-leave').addEventListener('click', ()=>{
             if(confirm('Покинуть игру?')) { send({type:'leave_game'}); showScreen('menu'); }
         });
-        
         canvas.addEventListener('click', (e) => {
-            if(!gameState || gameState.currentTurn !== myTeam || gameState.turnPlayer !== myPlayerId) return;
+            if(gameEnded || !gameState || gameState.currentTurn !== myTeam || gameState.turnPlayer !== myPlayerId) return;
             const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            const x = Math.floor((e.clientX - rect.left) * scaleX / 50);
-            const y = Math.floor((e.clientY - rect.top) * scaleY / 50);
+            const scale = canvas.width / rect.width;
+            const x = Math.floor((e.clientX - rect.left) * scale / 50);
+            const y = Math.floor((e.clientY - rect.top) * scale / 50);
             if(x<0||x>8||y<0||y>8) return;
             if(gameState.board[y][x] !== null) return;
+            if(gameState.blockedCells && gameState.blockedCells[`${x},${y}`]) return;
             selectedCell = {x,y};
             renderGame();
         });
-        
         document.getElementById('move-ok').addEventListener('click', ()=>{
             if(selectedCell) {
                 send({ type:'make_move', payload: selectedCell });
@@ -621,12 +676,8 @@
                 renderGame();
             }
         });
-        document.getElementById('move-cancel').addEventListener('click', ()=>{
-            selectedCell = null;
-            renderGame();
-        });
+        document.getElementById('move-cancel').addEventListener('click', ()=>{ selectedCell = null; renderGame(); });
         
-        // Инициализация
         updateStatsDisplay();
         connectWebSocket();
         showScreen('menu');
