@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#1a1e2c">
     <title>Triangle</title>
     <style>
         * { box-sizing: border-box; user-select: none; }
@@ -25,6 +26,7 @@
             padding: 24px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.6);
             border: 1px solid #3d4a6b;
+            margin: 16px;
         }
         .screen { display: flex; flex-direction: column; gap: 20px; }
         h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: 1px; }
@@ -103,6 +105,7 @@
             display: flex;
             gap: 20px;
             justify-content: center;
+            margin: 16px 0 24px 0;
         }
         .team-option {
             display: flex;
@@ -189,6 +192,11 @@
         }
         .hidden { display: none !important; }
         .flex-row { display: flex; gap: 12px; align-items: center; }
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
@@ -204,7 +212,7 @@
             <button class="btn" data-mode="2x2">2x2</button>
             <button class="btn" data-mode="3x3">3x3</button>
         </div>
-        <button class="btn primary" id="stats-btn">📊 Статистика</button>
+        <button class="btn primary" id="stats-btn">Статистика</button>
         <div id="stats-panel" class="stats hidden">
             <div>1x1: <span id="stat-1x1">0/0</span></div>
             <div>2x2: <span id="stat-2x2">0/0</span></div>
@@ -228,8 +236,10 @@
                 <input type="text" id="create-room-name" placeholder="Название комнаты" maxlength="20">
             </div>
             <div class="team-selector" id="create-team-selector"></div>
-            <button class="btn primary" id="confirm-create">Создать комнату</button>
-            <button class="btn" id="cancel-create">Отмена</button>
+            <div class="action-buttons">
+                <button class="btn primary" id="confirm-create">Создать</button>
+                <button class="btn" id="cancel-create">Отмена</button>
+            </div>
         </div>
         <!-- Join panel -->
         <div id="join-panel" class="hidden">
@@ -238,8 +248,10 @@
                 <button class="btn small" id="check-room-btn">Проверить</button>
             </div>
             <div class="team-selector" id="join-team-selector"></div>
-            <button class="btn primary" id="confirm-join">Присоединиться</button>
-            <button class="btn" id="cancel-join">Отмена</button>
+            <div class="action-buttons">
+                <button class="btn primary" id="confirm-join">Присоединиться</button>
+                <button class="btn" id="cancel-join">Отмена</button>
+            </div>
         </div>
     </div>
 
@@ -325,6 +337,12 @@
         function addWin(mode) { stats[mode][0]++; localStorage.setItem('triangle_stats', JSON.stringify(stats)); updateStatsDisplay(); }
         function addLoss(mode) { stats[mode][1]++; localStorage.setItem('triangle_stats', JSON.stringify(stats)); updateStatsDisplay(); }
         
+        // Сохранение ника при изменении
+        document.getElementById('nickname').addEventListener('input', (e) => {
+            nickname = e.target.value.trim() || 'Ник';
+            localStorage.setItem('nick', nickname);
+        });
+        
         function connectWebSocket() {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${location.host}`);
@@ -369,7 +387,6 @@
             const listDiv = document.getElementById('room-player-list');
             listDiv.innerHTML = '';
             
-            // Группировка по командам
             const teams = { X:[], O:[], T:[] };
             Object.values(room.players).forEach(p => teams[p.team].push(p));
             
@@ -396,12 +413,9 @@
                 });
             });
             
-            // Кнопка "Начать" всегда активна (переключает готовность)
-            const readyBtn = document.getElementById('room-ready-btn');
-            readyBtn.disabled = false;
+            document.getElementById('room-ready-btn').disabled = false;
         }
         
-        // Обновление селектора команд при проверке комнаты
         function updateJoinTeamSelector(roomInfo) {
             const container = document.getElementById('join-team-selector');
             const teams = ['X','O','T'];
@@ -562,6 +576,7 @@
             if(!selected) return alert('Выберите команду');
             const team = selected.dataset.team;
             nickname = document.getElementById('nickname').value.trim() || 'Ник';
+            localStorage.setItem('nick', nickname);
             send({ type:'create', payload:{ mode:selectedMode, roomName, team, nick:nickname } });
         });
         
@@ -572,6 +587,7 @@
             if(!selected) return alert('Выберите команду');
             const team = selected.dataset.team;
             nickname = document.getElementById('nickname').value.trim() || 'Ник';
+            localStorage.setItem('nick', nickname);
             send({ type:'join', payload:{ roomName, team, nick:nickname } });
         });
         
