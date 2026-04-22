@@ -5,25 +5,24 @@ const WebSocket = require('ws');
 
 const PORT = process.env.PORT || 8080;
 
-// Хранилище комнат
 const rooms = new Map();
 
 function genId() { return Math.random().toString(36).substr(2, 8); }
 
-// Проверка, можно ли ещё собрать тройку (любой командой)
-function canAnyTeamFormLine(board) {
+function canAnyTeamFormLine(board, blocked) {
     const teams = ['X','O','T'];
     const dirs = [[1,0],[0,1],[1,1],[1,-1]];
     for (let team of teams) {
         for (let y = 0; y < 9; y++) {
             for (let x = 0; x < 9; x++) {
                 if (board[y][x] !== null && board[y][x] !== team) continue;
+                if (blocked[`${x},${y}`]) continue;
                 for (let [dx,dy] of dirs) {
-                    let count = 0;
-                    let empty = 0;
+                    let count = 0, empty = 0;
                     for (let i = 0; i < 3; i++) {
                         const nx = x + i*dx, ny = y + i*dy;
                         if (nx<0||nx>=9||ny<0||ny>=9) break;
+                        if (blocked[`${nx},${ny}`]) break;
                         const cell = board[ny][nx];
                         if (cell === team) count++;
                         else if (cell === null) empty++;
@@ -37,22 +36,22 @@ function canAnyTeamFormLine(board) {
     return false;
 }
 
-function checkLines(board) {
+function checkLines(board, blocked) {
     const lines = [];
     const dirs = [[1,0],[0,1],[1,1],[1,-1]];
     for(let y=0;y<9;y++) for(let x=0;x<9;x++) {
         const cell = board[y][x];
-        if(!cell) continue;
+        if(!cell || blocked[`${x},${y}`]) continue;
         for(let [dx,dy] of dirs) {
             let count = 1;
             let nx = x+dx, ny = y+dy;
-            while(nx>=0&&nx<9&&ny>=0&&ny<9 && board[ny][nx]===cell) { count++; nx+=dx; ny+=dy; }
+            while(nx>=0&&nx<9&&ny>=0&&ny<9 && board[ny][nx]===cell && !blocked[`${nx},${ny}`]) { count++; nx+=dx; ny+=dy; }
             nx = x-dx; ny = y-dy;
-            while(nx>=0&&nx<9&&ny>=0&&ny<9 && board[ny][nx]===cell) { count++; nx-=dx; ny-=dy; }
+            while(nx>=0&&nx<9&&ny>=0&&ny<9 && board[ny][nx]===cell && !blocked[`${nx},${ny}`]) { count++; nx-=dx; ny-=dy; }
             if(count >= 3) {
                 const lineCells = [];
                 let sx = x, sy = y;
-                while(sx-dx>=0 && sy-dy>=0 && sx-dx<9 && sy-dy<9 && board[sy-dy][sx-dx]===cell) { sx-=dx; sy-=dy; }
+                while(sx-dx>=0 && sy-dy>=0 && sx-dx<9 && sy-dy<9 && board[sy-dy][sx-dx]===cell && !blocked[`${sx-dx},${sy-dy}`]) { sx-=dx; sy-=dy; }
                 for(let i=0;i<3;i++) {
                     const cx = sx + i*dx, cy = sy + i*dy;
                     lineCells.push([cx,cy]);
@@ -67,45 +66,14 @@ function checkLines(board) {
     return lines;
 }
 
-function applyLines(board, lines) {
-    const newBoard = board.map(row => [...row]);
-    const lineInfos = [];
-    lines.forEach(line => {
-        line.cells.forEach(([x,y]) => { newBoard[y][x] = null; });
-        lineInfos.push({
-            x1: line.cells[0][0], y1: line.cells[0][1],
-            x2: line.cells[2][0], y2: line.cells[2][1]
-        });
-    });
-    return { board: newBoard, lineInfos };
-}
-
-function countScores(lines) {
-    const scores = { X:0, O:0, T:0 };
-    lines.forEach(l => scores[l.team]++);
-    return scores;
-}
-
-function isGameFinished(board) {
-    return !canAnyTeamFormLine(board);
-}
-
-function determineWinner(scores) {
-    const max = Math.max(scores.X, scores.O, scores.T);
-    const winners = Object.entries(scores).filter(([_,v])=>v===max).map(([k])=>k);
-    return winners.length === 1 ? winners[0] : 'draw';
-}
-
 function startGame(room) {
     const players = Object.values(room.players);
-    const teamsPresent = [...new Set(players.map(p=>p.team))].sort((a,b)=> {
-        const order = { X:0, O:1, T:2 };
-        return order[a] - order[b];
-    });
+    const teamsPresent = [...new Set(players.map(p=>p.team))].sort((a,b)=> ({X:0,O:1,T:2}[a]-{X:0,O:1,T:2}[b]));
     const teamPlayers = {};
     teamsPresent.forEach(t => { teamPlayers[t] = players.filter(p=>p.team===t).map(p=>p.id); });
     const game = {
         board: Array(9).fill().map(()=>Array(9).fill(null)),
+        blockedCells: {},
         scores: { X:0, O:0, T:0 },
         lines: [],
         teams: teamsPresent,
@@ -147,23 +115,14 @@ function broadcastRoom(roomId, message) {
     });
 }
 
-// HTTP сервер для отдачи index.html
 const server = http.createServer((req, res) => {
     if (req.url === '/' || req.url === '/index.html') {
-        const filePath = path.join(__dirname, 'index.html');
-        fs.readFile(filePath, (err, data) => {
-            if (err) {
-                res.writeHead(500);
-                res.end('Error loading index.html');
-                return;
-            }
+        fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
+            if (err) { res.writeHead(500); return res.end('Error'); }
             res.writeHead(200, { 'Content-Type': 'text/html' });
             res.end(data);
         });
-    } else {
-        res.writeHead(404);
-        res.end('Not found');
-    }
+    } else { res.writeHead(404); res.end('Not found'); }
 });
 
 const wss = new WebSocket.Server({ server });
@@ -195,8 +154,7 @@ wss.on('connection', (ws) => {
             ws.send(JSON.stringify({ type:'room_created', payload: { roomId, playerId, team, room: getRoomPublic(room) } }));
         }
         else if(type === 'check_room') {
-            const { roomName } = payload;
-            const room = [...rooms.values()].find(r => r.name === roomName && !r.game);
+            const room = [...rooms.values()].find(r => r.name === payload.roomName && !r.game);
             if(!room) return ws.send(JSON.stringify({ type:'error', payload:{message:'Комната не найдена'} }));
             const occupied = { X:0, O:0, T:0 };
             Object.values(room.players).forEach(p => occupied[p.team]++);
@@ -207,6 +165,8 @@ wss.on('connection', (ws) => {
             const room = [...rooms.values()].find(r => r.name === roomName && !r.game);
             if(!room) return ws.send(JSON.stringify({ type:'error', payload:{message:'Комната не найдена'} }));
             const maxPerTeam = { '1x1':1, '2x2':2, '3x3':3 }[room.mode];
+            // Для 2x2 разрешены только X и O
+            if(room.mode === '2x2' && team === 'T') return ws.send(JSON.stringify({ type:'error', payload:{message:'В 2x2 только X и O'} }));
             const currentCount = Object.values(room.players).filter(p=>p.team===team).length;
             if(currentCount >= maxPerTeam) return ws.send(JSON.stringify({ type:'error', payload:{message:'Команда заполнена'} }));
             const playerId = genId();
@@ -234,19 +194,24 @@ wss.on('connection', (ws) => {
             const game = room.game;
             if(game.currentTurn !== ws.playerData.team || game.turnPlayer !== ws.playerData.id) return;
             const { x, y } = payload;
-            if(game.board[y][x] !== null) return;
+            if(game.board[y][x] !== null || game.blockedCells[`${x},${y}`]) return;
             game.board[y][x] = ws.playerData.team;
-            const lines = checkLines(game.board);
+            const lines = checkLines(game.board, game.blockedCells);
             if(lines.length > 0) {
-                const { board: newBoard, lineInfos } = applyLines(game.board, lines);
-                game.board = newBoard;
-                game.lines.push(...lineInfos);
-                const scores = countScores(lines);
-                game.scores.X += scores.X; game.scores.O += scores.O; game.scores.T += scores.T;
+                lines.forEach(line => {
+                    line.cells.forEach(([cx,cy]) => { game.blockedCells[`${cx},${cy}`] = true; });
+                    game.lines.push({
+                        x1: line.cells[0][0], y1: line.cells[0][1],
+                        x2: line.cells[2][0], y2: line.cells[2][1]
+                    });
+                    game.scores[line.team]++;
+                });
             }
             advanceTurn(room);
-            if(isGameFinished(game.board)) {
-                game.winner = determineWinner(game.scores);
+            if(!canAnyTeamFormLine(game.board, game.blockedCells)) {
+                const max = Math.max(game.scores.X||0, game.scores.O||0, game.scores.T||0);
+                const winners = Object.entries(game.scores).filter(([_,v])=>v===max).map(([k])=>k);
+                game.winner = winners.length === 1 ? winners[0] : 'draw';
             }
             broadcastRoom(ws.roomId, { type:'game_update', payload: game });
         }
@@ -284,6 +249,4 @@ function handleLeaveRoom(ws) {
     broadcastRoom(ws.roomId, { type:'room_update', payload: getRoomPublic(room) });
 }
 
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
