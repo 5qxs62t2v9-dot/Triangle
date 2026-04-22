@@ -1,7 +1,7 @@
 {
   "name": "triangle-game",
   "version": "1.0.0",
-  "description": "Multiplayer tic-tac-toe style game",
+  "description": "Multiplayer team game",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
