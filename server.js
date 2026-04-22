@@ -9,19 +9,19 @@ const rooms = new Map();
 
 function genId() { return Math.random().toString(36).substr(2, 8); }
 
-function canAnyTeamFormLine(board, blocked) {
+function canAnyTeamFormLine(board, blocked, boardSize) {
     const teams = ['X','O','T'];
     const dirs = [[1,0],[0,1],[1,1],[1,-1]];
     for (let team of teams) {
-        for (let y = 0; y < 9; y++) {
-            for (let x = 0; x < 9; x++) {
+        for (let y = 0; y < boardSize; y++) {
+            for (let x = 0; x < boardSize; x++) {
                 if (board[y][x] !== null && board[y][x] !== team) continue;
                 if (blocked[`${x},${y}`]) continue;
                 for (let [dx,dy] of dirs) {
                     let count = 0, empty = 0;
                     for (let i = 0; i < 3; i++) {
                         const nx = x + i*dx, ny = y + i*dy;
-                        if (nx<0||nx>=9||ny<0||ny>=9) break;
+                        if (nx<0||nx>=boardSize||ny<0||ny>=boardSize) break;
                         if (blocked[`${nx},${ny}`]) break;
                         const cell = board[ny][nx];
                         if (cell === team) count++;
@@ -36,22 +36,22 @@ function canAnyTeamFormLine(board, blocked) {
     return false;
 }
 
-function checkLines(board, blocked) {
+function checkLines(board, blocked, boardSize) {
     const lines = [];
     const dirs = [[1,0],[0,1],[1,1],[1,-1]];
-    for(let y=0;y<9;y++) for(let x=0;x<9;x++) {
+    for(let y=0;y<boardSize;y++) for(let x=0;x<boardSize;x++) {
         const cell = board[y][x];
         if(!cell || blocked[`${x},${y}`]) continue;
         for(let [dx,dy] of dirs) {
             let count = 1;
             let nx = x+dx, ny = y+dy;
-            while(nx>=0&&nx<9&&ny>=0&&ny<9 && board[ny][nx]===cell && !blocked[`${nx},${ny}`]) { count++; nx+=dx; ny+=dy; }
+            while(nx>=0&&nx<boardSize&&ny>=0&&ny<boardSize && board[ny][nx]===cell && !blocked[`${nx},${ny}`]) { count++; nx+=dx; ny+=dy; }
             nx = x-dx; ny = y-dy;
-            while(nx>=0&&nx<9&&ny>=0&&ny<9 && board[ny][nx]===cell && !blocked[`${nx},${ny}`]) { count++; nx-=dx; ny-=dy; }
+            while(nx>=0&&nx<boardSize&&ny>=0&&ny<boardSize && board[ny][nx]===cell && !blocked[`${nx},${ny}`]) { count++; nx-=dx; ny-=dy; }
             if(count >= 3) {
                 const lineCells = [];
                 let sx = x, sy = y;
-                while(sx-dx>=0 && sy-dy>=0 && sx-dx<9 && sy-dy<9 && board[sy-dy][sx-dx]===cell && !blocked[`${sx-dx},${sy-dy}`]) { sx-=dx; sy-=dy; }
+                while(sx-dx>=0 && sy-dy>=0 && sx-dx<boardSize && sy-dy<boardSize && board[sy-dy][sx-dx]===cell && !blocked[`${sx-dx},${sy-dy}`]) { sx-=dx; sy-=dy; }
                 for(let i=0;i<3;i++) {
                     const cx = sx + i*dx, cy = sy + i*dy;
                     lineCells.push([cx,cy]);
@@ -71,8 +71,18 @@ function startGame(room) {
     const teamsPresent = [...new Set(players.map(p=>p.team))].sort((a,b)=> ({X:0,O:1,T:2}[a]-{X:0,O:1,T:2}[b]));
     const teamPlayers = {};
     teamsPresent.forEach(t => { teamPlayers[t] = players.filter(p=>p.team===t).map(p=>p.id); });
+    
+    // Проверка равного количества игроков в командах для 3x3
+    if (room.mode === '3x3') {
+        const counts = teamsPresent.map(t => teamPlayers[t].length);
+        if (new Set(counts).size > 1) {
+            // ошибка, но мы не должны сюда попадать, т.к. при старте уже проверили
+        }
+    }
+    
+    const boardSize = room.boardSize;
     const game = {
-        board: Array(9).fill().map(()=>Array(9).fill(null)),
+        board: Array(boardSize).fill().map(()=>Array(boardSize).fill(null)),
         blockedCells: {},
         scores: { X:0, O:0, T:0 },
         lines: [],
@@ -83,7 +93,8 @@ function startGame(room) {
         currentTurn: teamsPresent[0],
         turnPlayer: teamPlayers[teamsPresent[0]][0],
         winner: null,
-        roomName: room.name
+        roomName: room.name,
+        boardSize
     };
     room.game = game;
     broadcastRoom(room.id, { type:'game_started', payload: game });
@@ -104,6 +115,7 @@ function getRoomPublic(room) {
     return {
         name: room.name, mode: room.mode,
         players: room.players,
+        boardSize: room.boardSize
     };
 }
 
@@ -138,10 +150,17 @@ wss.on('connection', (ws) => {
         const { type, payload } = msg;
 
         if(type === 'create') {
-            const { mode, roomName, team, nick } = payload;
+            const { mode, roomName, team, boardSize, nick } = payload;
+            // Проверка ограничения для 9x9
+            if (boardSize === 9) {
+                if (!(mode === '1x1' || (mode === '3x3'))) {
+                    return ws.send(JSON.stringify({ type:'error', payload:{message:'9x9 доступно только в 1x1 или 3x3 (по 1 игроку)'} }));
+                }
+                // Для 3x3 дополнительно проверим при старте, что игроков по 1
+            }
             const roomId = genId();
             const room = {
-                id: roomId, name: roomName, mode,
+                id: roomId, name: roomName, mode, boardSize,
                 players: {},
                 maxSlots: { '1x1':2, '2x2':4, '3x3':9 }[mode],
                 game: null
@@ -158,17 +177,32 @@ wss.on('connection', (ws) => {
             if(!room) return ws.send(JSON.stringify({ type:'error', payload:{message:'Комната не найдена'} }));
             const occupied = { X:0, O:0, T:0 };
             Object.values(room.players).forEach(p => occupied[p.team]++);
-            ws.send(JSON.stringify({ type:'room_info', payload: { mode: room.mode, occupied } }));
+            ws.send(JSON.stringify({ type:'room_info', payload: { mode: room.mode, occupied, boardSize: room.boardSize } }));
         }
         else if(type === 'join') {
             const { roomName, team, nick } = payload;
             const room = [...rooms.values()].find(r => r.name === roomName && !r.game);
             if(!room) return ws.send(JSON.stringify({ type:'error', payload:{message:'Комната не найдена'} }));
             const maxPerTeam = { '1x1':1, '2x2':2, '3x3':3 }[room.mode];
-            // Для 2x2 разрешены только X и O
-            if(room.mode === '2x2' && team === 'T') return ws.send(JSON.stringify({ type:'error', payload:{message:'В 2x2 только X и O'} }));
-            const currentCount = Object.values(room.players).filter(p=>p.team===team).length;
-            if(currentCount >= maxPerTeam) return ws.send(JSON.stringify({ type:'error', payload:{message:'Команда заполнена'} }));
+            // Проверка доступности команды по правилам
+            const occupied = { X:0, O:0, T:0 };
+            Object.values(room.players).forEach(p => occupied[p.team]++);
+            let availableTeams = ['X','O','T'];
+            if (room.mode === '2x2') {
+                const fullTeams = Object.entries(occupied).filter(([_,c])=>c===2).map(([t])=>t);
+                const startedTeams = Object.entries(occupied).filter(([_,c])=>c>0).map(([t])=>t);
+                if (fullTeams.length === 1 && startedTeams.length >= 2) {
+                    availableTeams = startedTeams;
+                }
+            }
+            if (!availableTeams.includes(team)) {
+                return ws.send(JSON.stringify({ type:'error', payload:{message:'Эта команда сейчас недоступна'} }));
+            }
+            if(occupied[team] >= maxPerTeam) {
+                return ws.send(JSON.stringify({ type:'error', payload:{message:'Команда заполнена'} }));
+            }
+            // Для 3x3 проверка равного количества игроков (при старте)
+            // Сейчас можно входить в любую команду, но при нажатии "начать" проверим
             const playerId = genId();
             room.players[playerId] = { id: playerId, nick, team, ready: false };
             ws.roomId = room.id;
@@ -182,8 +216,30 @@ wss.on('connection', (ws) => {
             const player = room.players[ws.playerData.id];
             player.ready = !player.ready;
             broadcastRoom(ws.roomId, { type:'room_update', payload: getRoomPublic(room) });
-            const allReady = Object.values(room.players).every(p=>p.ready) && Object.keys(room.players).length === room.maxSlots;
-            if(allReady) startGame(room);
+            // Проверка возможности старта
+            const players = Object.values(room.players);
+            const allReady = players.every(p=>p.ready);
+            const enoughPlayers = players.length === room.maxSlots;
+            let canStart = allReady && enoughPlayers;
+            if (room.mode === '3x3' && canStart) {
+                // Проверка равного количества игроков в командах
+                const counts = { X:0, O:0, T:0 };
+                players.forEach(p => counts[p.team]++);
+                const activeTeams = Object.values(counts).filter(c => c > 0);
+                if (new Set(activeTeams).size > 1) {
+                    canStart = false;
+                    // Отправим ошибку создателю? Просто не стартуем
+                }
+            }
+            // Доп. проверка для 9x9 в 3x3: должно быть ровно 3 игрока (по 1 в команде)
+            if (room.boardSize === 9 && room.mode === '3x3') {
+                if (players.length !== 3 || !players.every(p => counts[p.team] === 1)) {
+                    canStart = false;
+                }
+            }
+            if (canStart) {
+                startGame(room);
+            }
         }
         else if(type === 'leave_room') {
             handleLeaveRoom(ws);
@@ -196,7 +252,7 @@ wss.on('connection', (ws) => {
             const { x, y } = payload;
             if(game.board[y][x] !== null || game.blockedCells[`${x},${y}`]) return;
             game.board[y][x] = ws.playerData.team;
-            const lines = checkLines(game.board, game.blockedCells);
+            const lines = checkLines(game.board, game.blockedCells, room.boardSize);
             if(lines.length > 0) {
                 lines.forEach(line => {
                     line.cells.forEach(([cx,cy]) => { game.blockedCells[`${cx},${cy}`] = true; });
@@ -208,7 +264,7 @@ wss.on('connection', (ws) => {
                 });
             }
             advanceTurn(room);
-            if(!canAnyTeamFormLine(game.board, game.blockedCells)) {
+            if(!canAnyTeamFormLine(game.board, game.blockedCells, room.boardSize)) {
                 const max = Math.max(game.scores.X||0, game.scores.O||0, game.scores.T||0);
                 const winners = Object.entries(game.scores).filter(([_,v])=>v===max).map(([k])=>k);
                 game.winner = winners.length === 1 ? winners[0] : 'draw';
