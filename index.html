@@ -86,12 +86,6 @@
             width: 160px;
             padding: 6px 0;
         }
-        .mode-buttons {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            margin: 10px 0;
-        }
         .btn {
             background: #2e3a55;
             border: none;
@@ -113,10 +107,13 @@
         .btn:disabled { opacity: 0.5; transform: none; box-shadow: 0 4px 0 #121724; pointer-events: none; }
         .btn.primary { background: #5f7dcf; border-color: #a3bbff; }
         .btn.warning { background: #b55a5a; border-color: #e68a8a; }
-        .lobby-actions, .room-actions {
+        .lobby-actions {
             display: flex;
             gap: 15px;
             flex-wrap: wrap;
+        }
+        .lobby-actions .btn {
+            flex: 1;
         }
         .input-group {
             display: flex;
@@ -132,6 +129,15 @@
             border-radius: 40px;
             font-size: 1.1rem;
             outline: none;
+            width: 100%;
+        }
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 18px center;
+            background-size: 20px;
+            padding-right: 48px;
         }
         .team-selector {
             display: flex;
@@ -269,6 +275,9 @@
         .board-size-selector {
             margin: 12px 0;
         }
+        .full-width {
+            width: 100%;
+        }
     </style>
 </head>
 <body>
@@ -279,11 +288,7 @@
         <div class="nickname-row">
             <input type="text" id="nickname" value="Ник" maxlength="12" placeholder="Ваш ник">
         </div>
-        <div class="mode-buttons">
-            <button class="btn" data-mode="1x1">1x1</button>
-            <button class="btn" data-mode="2x2">2x2</button>
-            <button class="btn" data-mode="3x3">3x3</button>
-        </div>
+        <button class="btn primary" id="play-btn">Играть</button>
         <button class="btn primary" id="stats-btn">Статистика</button>
         <div id="stats-panel" class="stats hidden">
             <div>1x1: <span id="stat-1x1">0/0</span></div>
@@ -296,42 +301,40 @@
     <div id="lobby-screen" class="screen hidden">
         <div class="flex-row">
             <button class="back-btn" id="lobby-back">←</button>
-            <h2 id="lobby-mode-title">1x1</h2>
+            <h2 id="lobby-mode-title">Лобби</h2>
         </div>
         <div class="lobby-actions">
-            <button class="btn primary" id="create-room-btn">Создать</button>
-            <button class="btn" id="join-room-btn">Присоединиться</button>
+            <button class="btn primary" id="create-room-tab">Создать</button>
+            <button class="btn" id="join-room-tab">Присоединиться</button>
         </div>
-        <!-- Create panel -->
-        <div id="create-panel" class="hidden">
+        <!-- Панель создания (по умолчанию видна) -->
+        <div id="create-panel">
             <div class="input-group">
                 <input type="text" id="create-room-name" placeholder="Название комнаты" maxlength="20">
             </div>
-            <div class="board-size-selector">
-                <select id="board-size-select">
-                    <option value="9">9x9 (только 1x1 или 3x3 по 1 игроку)</option>
-                    <option value="12">12x12</option>
-                    <option value="15" selected>15x15</option>
-                    <option value="20">20x20</option>
+            <div class="input-group">
+                <select id="create-mode-select">
+                    <option value="1x1">1x1</option>
+                    <option value="2x2">2x2</option>
+                    <option value="3x3">3x3</option>
                 </select>
             </div>
-            <div class="team-selector" id="create-team-selector"></div>
-            <div class="action-buttons">
-                <button class="btn primary" id="confirm-create">Создать</button>
-                <button class="btn" id="cancel-create">Отмена</button>
+            <div class="input-group board-size-selector">
+                <select id="board-size-select"></select>
             </div>
+            <div class="team-selector" id="create-team-selector"></div>
+            <button class="btn primary full-width" id="confirm-create">Создать комнату</button>
         </div>
-        <!-- Join panel -->
+        <!-- Панель присоединения (скрыта по умолчанию) -->
         <div id="join-panel" class="hidden">
             <div class="input-group">
                 <input type="text" id="join-room-name" placeholder="Название комнаты">
+            </div>
+            <div class="input-group">
                 <button class="btn small" id="check-room-btn">Проверить</button>
             </div>
             <div class="team-selector" id="join-team-selector"></div>
-            <div class="action-buttons">
-                <button class="btn primary" id="confirm-join">Присоединиться</button>
-                <button class="btn" id="cancel-join">Отмена</button>
-            </div>
+            <button class="btn primary full-width" id="confirm-join">Присоединиться</button>
         </div>
     </div>
 
@@ -372,6 +375,7 @@
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.addEventListener('gesturestart', e => e.preventDefault());
         document.addEventListener('touchmove', e => { if (e.target.tagName !== 'INPUT') e.preventDefault(); }, { passive: false });
+        document.addEventListener('selectstart', e => e.preventDefault());
         
         const SVG = {
             cross: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#5b9aff" stroke-width="3" stroke-linecap="round"><line x1="4" y1="4" x2="20" y2="20"/><line x1="20" y1="4" x2="4" y2="20"/></svg>`,
@@ -497,20 +501,13 @@
             const mode = roomInfo.mode;
             const maxPerTeam = { '1x1':1, '2x2':2, '3x3':3 }[mode];
             const occupied = roomInfo.occupied || { X:0, O:0, T:0 };
-            // Определяем доступные команды согласно правилам
             let availableTeams = ['X','O','T'];
             if (mode === '2x2') {
-                // Если одна команда полностью заполнена (2 игрока) и другая имеет хотя бы одного игрока,
-                // то третья команда становится недоступной.
-                const fullTeams = Object.entries(occupied).filter(([_,count]) => count === 2).map(([t])=>t);
-                const startedTeams = Object.entries(occupied).filter(([_,count]) => count > 0).map(([t])=>t);
+                const fullTeams = Object.entries(occupied).filter(([_,c])=>c===2).map(([t])=>t);
+                const startedTeams = Object.entries(occupied).filter(([_,c])=>c>0).map(([t])=>t);
                 if (fullTeams.length === 1 && startedTeams.length >= 2) {
-                    // Третья команда недоступна
                     availableTeams = startedTeams;
                 }
-            } else if (mode === '3x3') {
-                // В 3x3 все команды доступны всегда (если не заполнены)
-                // Никаких ограничений
             }
             availableTeams.forEach(t => {
                 const div = document.createElement('div');
@@ -528,15 +525,51 @@
             });
         }
         
+        // Обновление выпадающего списка размеров поля в зависимости от выбранного режима
+        function updateBoardSizeOptions() {
+            const mode = document.getElementById('create-mode-select').value;
+            const select = document.getElementById('board-size-select');
+            select.innerHTML = '';
+            const sizes = mode === '1x1' ? [9,12,15,20] : [12,15,20];
+            sizes.forEach(size => {
+                const opt = document.createElement('option');
+                opt.value = size;
+                opt.textContent = `${size}x${size}`;
+                if(size === 15) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+        
+        // Переключение вкладок создания/присоединения
+        function setLobbyTab(tab) {
+            const createPanel = document.getElementById('create-panel');
+            const joinPanel = document.getElementById('join-panel');
+            const createTabBtn = document.getElementById('create-room-tab');
+            const joinTabBtn = document.getElementById('join-room-tab');
+            if (tab === 'create') {
+                createPanel.classList.remove('hidden');
+                joinPanel.classList.add('hidden');
+                createTabBtn.classList.add('primary');
+                joinTabBtn.classList.remove('primary');
+                renderTeamSelector('create-team-selector');
+                updateBoardSizeOptions();
+            } else {
+                createPanel.classList.add('hidden');
+                joinPanel.classList.remove('hidden');
+                createTabBtn.classList.remove('primary');
+                joinTabBtn.classList.add('primary');
+                document.getElementById('join-team-selector').innerHTML = '';
+            }
+        }
+        
         let selectedCell = null;
-        let cellSize = 50; // default for 9x9
+        let cellSize = 50;
         
         function renderGame() {
             if(!gameState) return;
             const boardSize = gameState.boardSize || 9;
             cellSize = 450 / boardSize;
             ctx.clearRect(0,0,450,450);
-            // сетка
             ctx.strokeStyle = '#4e6190';
             ctx.lineWidth = 2;
             for(let i=1;i<boardSize;i++) {
@@ -556,7 +589,6 @@
                 else if(cell === 'O') drawCircle(cx, cy, getTeamColor('O'), size);
                 else if(cell === 'T') drawTriangle(cx, cy, getTeamColor('T'), size);
             }
-            // зачёркивания
             ctx.lineWidth = Math.max(4, cellSize/8);
             ctx.strokeStyle = '#f0e68c';
             if(gameState.lines) {
@@ -567,7 +599,6 @@
                     ctx.stroke();
                 });
             }
-            // временный символ
             if(!gameEnded && gameState.currentTurn === myTeam && gameState.turnPlayer === myPlayerId && selectedCell) {
                 const {x,y} = selectedCell;
                 if(!gameState.blockedCells || !gameState.blockedCells[`${x},${y}`]) {
@@ -616,21 +647,6 @@
             else if(gameState.winner !== 'draw') addLoss(selectedMode);
         }
         
-        // Обработчики
-        document.querySelectorAll('[data-mode]').forEach(btn => btn.addEventListener('click', (e) => {
-            selectedMode = e.target.dataset.mode;
-            document.getElementById('lobby-mode-title').innerText = selectedMode;
-            showScreen('lobby');
-            resetLobbyPanels();
-        }));
-        document.getElementById('stats-btn').addEventListener('click', ()=> document.getElementById('stats-panel').classList.toggle('hidden'));
-        document.getElementById('lobby-back').addEventListener('click', ()=> showScreen('menu'));
-        function resetLobbyPanels() {
-            document.getElementById('create-panel').classList.add('hidden');
-            document.getElementById('join-panel').classList.add('hidden');
-            renderTeamSelector('create-team-selector');
-            document.getElementById('join-team-selector').innerHTML = '';
-        }
         function renderTeamSelector(containerId) {
             const container = document.getElementById(containerId);
             container.innerHTML = '';
@@ -646,32 +662,40 @@
                 container.appendChild(div);
             });
         }
-        document.getElementById('create-room-btn').addEventListener('click', ()=>{
-            document.getElementById('create-panel').classList.remove('hidden');
-            document.getElementById('join-panel').classList.add('hidden');
-            renderTeamSelector('create-team-selector');
+        
+        // Инициализация обработчиков
+        document.getElementById('play-btn').addEventListener('click', ()=>{
+            selectedMode = '1x1'; // По умолчанию
+            showScreen('lobby');
+            setLobbyTab('create');
         });
-        document.getElementById('join-room-btn').addEventListener('click', ()=>{
-            document.getElementById('join-panel').classList.remove('hidden');
-            document.getElementById('create-panel').classList.add('hidden');
-        });
-        document.getElementById('cancel-create').addEventListener('click', resetLobbyPanels);
-        document.getElementById('cancel-join').addEventListener('click', resetLobbyPanels);
+        document.getElementById('stats-btn').addEventListener('click', ()=> document.getElementById('stats-panel').classList.toggle('hidden'));
+        document.getElementById('lobby-back').addEventListener('click', ()=> showScreen('menu'));
+        
+        document.getElementById('create-room-tab').addEventListener('click', ()=> setLobbyTab('create'));
+        document.getElementById('join-room-tab').addEventListener('click', ()=> setLobbyTab('join'));
+        
+        document.getElementById('create-mode-select').addEventListener('change', updateBoardSizeOptions);
+        
         document.getElementById('check-room-btn').addEventListener('click', ()=>{
             const name = document.getElementById('join-room-name').value.trim();
             if(!name) return alert('Введите название');
             send({ type:'check_room', payload: { roomName: name } });
         });
+        
         document.getElementById('confirm-create').addEventListener('click', ()=>{
             const roomName = document.getElementById('create-room-name').value.trim();
             if(!roomName) return alert('Введите название');
             const selected = document.querySelector('#create-team-selector .team-option.selected');
             if(!selected) return alert('Выберите команду');
+            const mode = document.getElementById('create-mode-select').value;
             const boardSize = parseInt(document.getElementById('board-size-select').value);
             nickname = document.getElementById('nickname').value.trim() || 'Ник';
             localStorage.setItem('nick', nickname);
-            send({ type:'create', payload:{ mode:selectedMode, roomName, team: selected.dataset.team, boardSize, nick:nickname } });
+            selectedMode = mode;
+            send({ type:'create', payload:{ mode, roomName, team: selected.dataset.team, boardSize, nick:nickname } });
         });
+        
         document.getElementById('confirm-join').addEventListener('click', ()=>{
             const roomName = document.getElementById('join-room-name').value.trim();
             if(!roomName) return alert('Введите название');
@@ -681,12 +705,14 @@
             localStorage.setItem('nick', nickname);
             send({ type:'join', payload:{ roomName, team: selected.dataset.team, nick:nickname } });
         });
+        
         document.getElementById('room-leave').addEventListener('click', ()=> { if(confirm('Выйти?')) { send({type:'leave_room'}); showScreen('lobby'); } });
         document.getElementById('room-leave-btn').addEventListener('click', ()=> { if(confirm('Выйти?')) { send({type:'leave_room'}); showScreen('lobby'); } });
         document.getElementById('room-ready-btn').addEventListener('click', ()=> send({ type:'toggle_ready' }));
         document.getElementById('game-leave').addEventListener('click', ()=>{
             if(confirm('Покинуть игру?')) { send({type:'leave_game'}); showScreen('menu'); }
         });
+        
         canvas.addEventListener('click', (e) => {
             if(gameEnded || !gameState || gameState.currentTurn !== myTeam || gameState.turnPlayer !== myPlayerId) return;
             const rect = canvas.getBoundingClientRect();
@@ -701,6 +727,7 @@
             selectedCell = {x,y};
             renderGame();
         });
+        
         document.getElementById('move-ok').addEventListener('click', ()=>{
             if(selectedCell) {
                 send({ type:'make_move', payload: selectedCell });
