@@ -115,6 +115,14 @@
         .lobby-actions .btn {
             flex: 1;
         }
+        .room-actions {
+            display: flex;
+            gap: 15px;
+            width: 100%;
+        }
+        .room-actions .btn {
+            flex: 1;
+        }
         .input-group {
             display: flex;
             flex-direction: column;
@@ -268,6 +276,12 @@
             align-items: center;
             gap: 8px;
         }
+        .result-team svg {
+            width: 24px;
+            height: 24px;
+            display: inline-block;
+            vertical-align: middle;
+        }
         .result-score {
             font-size: 1.5rem;
             font-weight: bold;
@@ -277,6 +291,17 @@
         }
         .full-width {
             width: 100%;
+        }
+        .winner-announce {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .winner-announce svg {
+            width: 24px;
+            height: 24px;
         }
     </style>
 </head>
@@ -307,7 +332,7 @@
             <button class="btn primary" id="create-room-tab">Создать</button>
             <button class="btn" id="join-room-tab">Присоединиться</button>
         </div>
-        <!-- Панель создания (по умолчанию видна) -->
+        <!-- Панель создания -->
         <div id="create-panel">
             <div class="input-group">
                 <input type="text" id="create-room-name" placeholder="Название комнаты" maxlength="20">
@@ -325,7 +350,7 @@
             <div class="team-selector" id="create-team-selector"></div>
             <button class="btn primary full-width" id="confirm-create">Создать комнату</button>
         </div>
-        <!-- Панель присоединения (скрыта по умолчанию) -->
+        <!-- Панель присоединения -->
         <div id="join-panel" class="hidden">
             <div class="input-group">
                 <input type="text" id="join-room-name" placeholder="Название комнаты">
@@ -414,6 +439,8 @@
             screens[name].classList.remove('hidden');
             currentScreen = name;
             gameEnded = false;
+            // Скрываем результаты при уходе с игрового экрана
+            document.getElementById('game-result').classList.add('hidden');
         }
         
         function updateStatsDisplay() {
@@ -525,7 +552,6 @@
             });
         }
         
-        // Обновление выпадающего списка размеров поля в зависимости от выбранного режима
         function updateBoardSizeOptions() {
             const mode = document.getElementById('create-mode-select').value;
             const select = document.getElementById('board-size-select');
@@ -540,7 +566,6 @@
             });
         }
         
-        // Переключение вкладок создания/присоединения
         function setLobbyTab(tab) {
             const createPanel = document.getElementById('create-panel');
             const joinPanel = document.getElementById('join-panel');
@@ -638,10 +663,13 @@
             const teams = Object.keys(scores).filter(t => scores[t] !== undefined);
             let html = '';
             teams.forEach(team => {
-                html += `<div class="result-row"><div class="result-team">${getTeamIcon(team)} ${getTeamName(team)}</div><div class="result-score">${scores[team]}</div></div>`;
+                html += `<div class="result-row"><div class="result-team">${getTeamIcon(team)} <span>${getTeamName(team)}</span></div><div class="result-score">${scores[team]}</div></div>`;
             });
-            if(gameState.winner === 'draw') html += '<div style="text-align:center; margin-top:10px;">Ничья!</div>';
-            else html += `<div style="text-align:center; margin-top:10px;">Победитель: ${getTeamName(gameState.winner)} ${getTeamIcon(gameState.winner)}</div>`;
+            if(gameState.winner === 'draw') {
+                html += '<div class="winner-announce">Ничья!</div>';
+            } else {
+                html += `<div class="winner-announce">Победитель: ${getTeamIcon(gameState.winner)} <span>${getTeamName(gameState.winner)}</span></div>`;
+            }
             resultDiv.innerHTML = html;
             if(gameState.winner !== 'draw' && gameState.winner === myTeam) addWin(selectedMode);
             else if(gameState.winner !== 'draw') addLoss(selectedMode);
@@ -663,26 +691,20 @@
             });
         }
         
-        // Инициализация обработчиков
         document.getElementById('play-btn').addEventListener('click', ()=>{
-            selectedMode = '1x1'; // По умолчанию
             showScreen('lobby');
             setLobbyTab('create');
         });
         document.getElementById('stats-btn').addEventListener('click', ()=> document.getElementById('stats-panel').classList.toggle('hidden'));
         document.getElementById('lobby-back').addEventListener('click', ()=> showScreen('menu'));
-        
         document.getElementById('create-room-tab').addEventListener('click', ()=> setLobbyTab('create'));
         document.getElementById('join-room-tab').addEventListener('click', ()=> setLobbyTab('join'));
-        
         document.getElementById('create-mode-select').addEventListener('change', updateBoardSizeOptions);
-        
         document.getElementById('check-room-btn').addEventListener('click', ()=>{
             const name = document.getElementById('join-room-name').value.trim();
             if(!name) return alert('Введите название');
             send({ type:'check_room', payload: { roomName: name } });
         });
-        
         document.getElementById('confirm-create').addEventListener('click', ()=>{
             const roomName = document.getElementById('create-room-name').value.trim();
             if(!roomName) return alert('Введите название');
@@ -695,7 +717,6 @@
             selectedMode = mode;
             send({ type:'create', payload:{ mode, roomName, team: selected.dataset.team, boardSize, nick:nickname } });
         });
-        
         document.getElementById('confirm-join').addEventListener('click', ()=>{
             const roomName = document.getElementById('join-room-name').value.trim();
             if(!roomName) return alert('Введите название');
@@ -705,14 +726,12 @@
             localStorage.setItem('nick', nickname);
             send({ type:'join', payload:{ roomName, team: selected.dataset.team, nick:nickname } });
         });
-        
         document.getElementById('room-leave').addEventListener('click', ()=> { if(confirm('Выйти?')) { send({type:'leave_room'}); showScreen('lobby'); } });
         document.getElementById('room-leave-btn').addEventListener('click', ()=> { if(confirm('Выйти?')) { send({type:'leave_room'}); showScreen('lobby'); } });
         document.getElementById('room-ready-btn').addEventListener('click', ()=> send({ type:'toggle_ready' }));
         document.getElementById('game-leave').addEventListener('click', ()=>{
             if(confirm('Покинуть игру?')) { send({type:'leave_game'}); showScreen('menu'); }
         });
-        
         canvas.addEventListener('click', (e) => {
             if(gameEnded || !gameState || gameState.currentTurn !== myTeam || gameState.turnPlayer !== myPlayerId) return;
             const rect = canvas.getBoundingClientRect();
@@ -727,7 +746,6 @@
             selectedCell = {x,y};
             renderGame();
         });
-        
         document.getElementById('move-ok').addEventListener('click', ()=>{
             if(selectedCell) {
                 send({ type:'make_move', payload: selectedCell });
