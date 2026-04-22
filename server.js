@@ -1,9 +1,11 @@
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const WebSocket = require('ws');
+
 const PORT = process.env.PORT || 8080;
 
-const server = new WebSocket.Server({ port: PORT });
-console.log(`WebSocket сервер запущен на порту ${PORT}`);
-
+// Хранилище комнат
 const rooms = new Map();
 
 function genId() { return Math.random().toString(36).substr(2, 8); }
@@ -94,7 +96,6 @@ function determineWinner(scores) {
     return winners.length === 1 ? winners[0] : 'draw';
 }
 
-// Новая логика очерёдности ходов
 function startGame(room) {
     const players = Object.values(room.players);
     const teamsPresent = [...new Set(players.map(p=>p.team))].sort((a,b)=> {
@@ -110,7 +111,7 @@ function startGame(room) {
         teams: teamsPresent,
         teamPlayers,
         currentTeamIdx: 0,
-        playerIdx: 0,          // индекс текущего игрока внутри текущей команды
+        playerIdx: 0,
         currentTurn: teamsPresent[0],
         turnPlayer: teamPlayers[teamsPresent[0]][0],
         winner: null,
@@ -124,23 +125,50 @@ function advanceTurn(room) {
     const game = room.game;
     const teams = game.teams;
     const currentTeam = teams[game.currentTeamIdx];
-    // Переходим к следующему игроку в текущей команде
     game.playerIdx = (game.playerIdx + 1) % game.teamPlayers[currentTeam].length;
-    // Переходим к следующей команде
     game.currentTeamIdx = (game.currentTeamIdx + 1) % teams.length;
     const nextTeam = teams[game.currentTeamIdx];
     game.currentTurn = nextTeam;
-    // Если перешли на новую команду, берём её первого игрока (если не первый круг)
-    if (game.playerIdx === 0) {
-        // уже перешли на следующую команду, playerIdx сброшен в 0 после увеличения?
-        // Логика: после хода игрока мы увеличиваем playerIdx, затем переключаем команду.
-        // Поэтому для новой команды нужно использовать её текущий индекс (он не менялся)
-    }
-    // Устанавливаем игрока для хода
     game.turnPlayer = game.teamPlayers[nextTeam][game.playerIdx];
 }
 
-server.on('connection', (ws) => {
+function getRoomPublic(room) {
+    return {
+        name: room.name, mode: room.mode,
+        players: room.players,
+    };
+}
+
+function broadcastRoom(roomId, message) {
+    wss.clients.forEach(client => {
+        if(client.roomId === roomId && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(message));
+        }
+    });
+}
+
+// HTTP сервер для отдачи index.html
+const server = http.createServer((req, res) => {
+    if (req.url === '/' || req.url === '/index.html') {
+        const filePath = path.join(__dirname, 'index.html');
+        fs.readFile(filePath, (err, data) => {
+            if (err) {
+                res.writeHead(500);
+                res.end('Error loading index.html');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(data);
+        });
+    } else {
+        res.writeHead(404);
+        res.end('Not found');
+    }
+});
+
+const wss = new WebSocket.Server({ server });
+
+wss.on('connection', (ws) => {
     ws.id = genId();
     ws.roomId = null;
     ws.playerData = null;
@@ -240,7 +268,6 @@ function handleLeaveRoom(ws) {
     }
     if(room.game) {
         if(room.mode === '1x1') {
-            // в 1x1 при выходе игра завершается, оставшийся побеждает
             const remaining = Object.values(room.players)[0];
             room.game.winner = remaining ? remaining.team : 'draw';
             broadcastRoom(ws.roomId, { type:'game_update', payload: room.game });
@@ -257,17 +284,6 @@ function handleLeaveRoom(ws) {
     broadcastRoom(ws.roomId, { type:'room_update', payload: getRoomPublic(room) });
 }
 
-function getRoomPublic(room) {
-    return {
-        name: room.name, mode: room.mode,
-        players: room.players,
-    };
-}
-
-function broadcastRoom(roomId, message) {
-    server.clients.forEach(client => {
-        if(client.roomId === roomId && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(message));
-        }
-    });
-}
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
