@@ -41,13 +41,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 12px;
             background: #1f2538;
-            padding: 10px 20px;
+            padding: 8px 20px;
             border-radius: 60px;
             border: 1px solid #4a5670;
         }
-        .nickname-label { font-size: 1.3rem; color: #b7c4e8; }
         #nickname {
             background: transparent;
             border: none;
@@ -56,8 +54,8 @@
             color: #ffde9e;
             text-align: center;
             outline: none;
-            width: 140px;
-            border-bottom: 2px dashed #5f73a1;
+            width: 160px;
+            padding: 6px 0;
         }
         .mode-buttons {
             display: flex;
@@ -103,19 +101,25 @@
         }
         .team-selector {
             display: flex;
-            gap: 15px;
-            justify-content: space-around;
+            gap: 20px;
+            justify-content: center;
         }
         .team-option {
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             cursor: pointer;
-            padding: 10px 16px;
-            border-radius: 30px;
+            padding: 12px;
+            border-radius: 20px;
             background: #252e44;
             border: 2px solid transparent;
             transition: 0.1s;
+            min-width: 70px;
+        }
+        .team-option svg {
+            width: 32px;
+            height: 32px;
         }
         .team-option.selected { border-color: #ffd966; background: #334十五; }
         .team-option.disabled {
@@ -134,10 +138,23 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            padding: 8px 12px;
+            padding: 10px 12px;
             border-bottom: 1px solid #334十五;
         }
-        .ready-badge { margin-left: auto; color: #6fcf97; font-weight: bold; }
+        .player-nick {
+            flex: 1;
+        }
+        .player-team-icon svg {
+            width: 24px;
+            height: 24px;
+            vertical-align: middle;
+        }
+        .ready-badge {
+            margin-left: auto;
+            color: #6fcf97;
+            font-weight: bold;
+            font-size: 1.3rem;
+        }
         .game-header { display: flex; align-items: center; gap: 15px; }
         .back-btn {
             background: none;
@@ -172,7 +189,6 @@
         }
         .hidden { display: none !important; }
         .flex-row { display: flex; gap: 12px; align-items: center; }
-        .svg-icon { width: 28px; height: 28px; filter: drop-shadow(0 2px 2px black); }
     </style>
 </head>
 <body>
@@ -181,8 +197,7 @@
     <div id="menu-screen" class="screen">
         <h1>▲ Triangle</h1>
         <div class="nickname-row">
-            <span class="nickname-label">Ник</span>
-            <input type="text" id="nickname" value="Ник" maxlength="12">
+            <input type="text" id="nickname" value="Ник" maxlength="12" placeholder="Ваш ник">
         </div>
         <div class="mode-buttons">
             <button class="btn" data-mode="1x1">1x1</button>
@@ -331,7 +346,6 @@
             } else if(type === 'room_update') {
                 updateRoomUI(payload);
             } else if(type === 'room_info') {
-                // Используется для проверки комнаты перед присоединением
                 updateJoinTeamSelector(payload);
             } else if(type === 'game_started') {
                 gameState = payload;
@@ -354,24 +368,37 @@
             document.getElementById('room-players-count').innerText = `${Object.keys(room.players).length}/${maxSlots}`;
             const listDiv = document.getElementById('room-player-list');
             listDiv.innerHTML = '';
+            
+            // Группировка по командам
             const teams = { X:[], O:[], T:[] };
             Object.values(room.players).forEach(p => teams[p.team].push(p));
+            
             ['X','O','T'].forEach(team => {
                 if(teams[team].length === 0) return;
-                const header = document.createElement('div');
-                header.style.color = getTeamColor(team);
-                header.style.marginTop = '8px';
-                header.innerHTML = `${getTeamName(team)} ${getTeamIcon(team)}`;
-                listDiv.appendChild(header);
+                const teamDiv = document.createElement('div');
+                teamDiv.style.marginTop = '12px';
+                teamDiv.style.marginBottom = '4px';
+                teamDiv.style.display = 'flex';
+                teamDiv.style.alignItems = 'center';
+                teamDiv.style.gap = '8px';
+                teamDiv.innerHTML = `<span style="color:${getTeamColor(team)}; font-weight:bold;">${getTeamName(team)}</span> ${getTeamIcon(team)}`;
+                listDiv.appendChild(teamDiv);
+                
                 teams[team].forEach(p => {
                     const div = document.createElement('div');
                     div.className = 'player-item';
-                    div.innerHTML = `<span>${p.nick}</span> ${p.ready ? '<span class="ready-badge">✓</span>' : ''}`;
+                    div.innerHTML = `
+                        <span class="player-nick">${p.nick}</span>
+                        <span class="player-team-icon">${getTeamIcon(team)}</span>
+                        ${p.ready ? '<span class="ready-badge">✓</span>' : ''}
+                    `;
                     listDiv.appendChild(div);
                 });
             });
-            const allReady = Object.values(room.players).every(p => p.ready) && Object.keys(room.players).length === maxSlots;
-            document.getElementById('room-ready-btn').disabled = !allReady && !room.players[myPlayerId]?.ready;
+            
+            // Кнопка "Начать" всегда активна (переключает готовность)
+            const readyBtn = document.getElementById('room-ready-btn');
+            readyBtn.disabled = false;
         }
         
         // Обновление селектора команд при проверке комнаты
@@ -385,7 +412,7 @@
                 const div = document.createElement('div');
                 div.className = 'team-option';
                 div.dataset.team = t;
-                div.innerHTML = getTeamIcon(t) + `<br>${t}`;
+                div.innerHTML = getTeamIcon(t);
                 if(occupied[t] >= maxPerTeam) div.classList.add('disabled');
                 else {
                     div.addEventListener('click', ()=>{
@@ -490,7 +517,6 @@
             document.getElementById('create-panel').classList.add('hidden');
             document.getElementById('join-panel').classList.add('hidden');
             renderTeamSelector('create-team-selector');
-            // Очищаем селектор присоединения
             document.getElementById('join-team-selector').innerHTML = '';
         }
         
@@ -502,7 +528,7 @@
                 const div = document.createElement('div');
                 div.className = 'team-option';
                 div.dataset.team = t;
-                div.innerHTML = getTeamIcon(t) + `<br>${t}`;
+                div.innerHTML = getTeamIcon(t);
                 div.addEventListener('click', ()=>{
                     container.querySelectorAll('.team-option').forEach(o=>o.classList.remove('selected'));
                     div.classList.add('selected');
