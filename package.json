@@ -1,0 +1,12 @@
+{
+  "name": "triangle-game",
+  "version": "1.0.0",
+  "description": "Multiplayer tic-tac-toe style game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.14.2"
+  }
+}
