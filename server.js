@@ -57,13 +57,38 @@ function checkLines(board, blocked, boardSize) {
                     lineCells.push([cx,cy]);
                 }
                 const key = lineCells.map(c=>`${c[0]},${c[1]}`).sort().join(';');
-                if(!lines.some(l=>l.key===key)) {
-                    lines.push({ cells: lineCells, team: cell, key });
-                }
+                if(!lines.some(l=>l.key===key)) lines.push({ cells: lineCells, team: cell, key });
             }
         }
     }
     return lines;
+}
+
+function buildRoundRobinQueue(teams, teamPlayers) {
+    // Создаём очередь вида: [X1, O1, T1, X2, O2, T2, X3, O3, T3]
+    const queue = [];
+    const maxPlayers = Math.max(...teams.map(t => teamPlayers[t].length));
+    for (let i = 0; i < maxPlayers; i++) {
+        for (const team of teams) {
+            const player = teamPlayers[team][i];
+            if (player) queue.push({ team, playerId: player });
+        }
+    }
+    return queue;
+}
+
+function nextTurn(room) {
+    const game = room.game;
+    const queue = game.turnQueue;
+    const currentIndex = queue.findIndex(item => item.playerId === game.turnPlayer);
+    let nextIndex = (currentIndex + 1) % queue.length;
+    // Пропускаем отключенных игроков (но они остаются в очереди, их ход автоматически передаётся дальше)
+    while (room.players[queue[nextIndex].playerId]?.online === false) {
+        nextIndex = (nextIndex + 1) % queue.length;
+        if (nextIndex === currentIndex) break; // все оффлайн — маловероятно
+    }
+    game.turnPlayer = queue[nextIndex].playerId;
+    game.currentTurn = queue[nextIndex].team;
 }
 
 function startGame(room) {
@@ -71,70 +96,34 @@ function startGame(room) {
     const teamsPresent = [...new Set(players.map(p=>p.team))].sort((a,b)=> ({X:0,O:1,T:2}[a]-{X:0,O:1,T:2}[b]));
     const teamPlayers = {};
     teamsPresent.forEach(t => { teamPlayers[t] = players.filter(p=>p.team===t).map(p=>p.id); });
-    
-    // Подготовка данных для панели очерёдности
-    const playersMap = {};
-    players.forEach(p => { playersMap[p.id] = p; });
-    
-    // Создаём последовательность ходов: все игроки всех команд в порядке X,O,T,
-    // затем снова первые игроки и т.д. (если разное количество игроков — как описано)
-    const turnOrderList = [];
-    const maxPlayersInTeam = Math.max(...teamsPresent.map(t => teamPlayers[t].length));
-    for (let round = 0; round < maxPlayersInTeam; round++) {
-        for (let team of teamsPresent) {
-            const playerId = teamPlayers[team][round];
-            if (playerId) {
-                turnOrderList.push({ team, playerId });
-            }
-        }
-    }
-    
+    const turnQueue = buildRoundRobinQueue(teamsPresent, teamPlayers);
+    const boardSize = room.boardSize;
     const game = {
-        board: Array(room.boardSize).fill().map(()=>Array(room.boardSize).fill(null)),
+        board: Array(boardSize).fill().map(()=>Array(boardSize).fill(null)),
         blockedCells: {},
         scores: { X:0, O:0, T:0 },
         lines: [],
         teams: teamsPresent,
         teamPlayers,
-        players: playersMap,
-        turnOrderList,
-        currentTurnIndex: 0,
-        currentTurn: turnOrderList[0].team,
-        turnPlayer: turnOrderList[0].playerId,
+        turnQueue,
+        currentTurn: turnQueue[0].team,
+        turnPlayer: turnQueue[0].playerId,
         winner: null,
         roomName: room.name,
-        boardSize: room.boardSize,
-        // для отображения на клиенте
-        turnOrder: {
-            teams: teamsPresent,
-            teamPlayers
-        }
+        boardSize,
+        players: room.players // для отправки на клиент
     };
     room.game = game;
     broadcastRoom(room.id, { type:'game_started', payload: game });
 }
 
-function advanceTurn(room) {
-    const game = room.game;
-    game.currentTurnIndex = (game.currentTurnIndex + 1) % game.turnOrderList.length;
-    const next = game.turnOrderList[game.currentTurnIndex];
-    game.currentTurn = next.team;
-    game.turnPlayer = next.playerId;
-}
-
 function getRoomPublic(room) {
-    return {
-        name: room.name, mode: room.mode,
-        players: room.players,
-        boardSize: room.boardSize
-    };
+    return { name: room.name, mode: room.mode, players: room.players, boardSize: room.boardSize };
 }
 
 function broadcastRoom(roomId, message) {
     wss.clients.forEach(client => {
-        if(client.roomId === roomId && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(message));
-        }
+        if(client.roomId === roomId && client.readyState === WebSocket.OPEN) client.send(JSON.stringify(message));
     });
 }
 
@@ -184,18 +173,17 @@ wss.on('connection', (ws) => {
         if(type === 'create') {
             const { mode, roomName, team, boardSize, nick } = payload;
             if (boardSize === 9 && mode !== '1x1') {
-                return ws.send(JSON.stringify({ type:'error', payload:{message:'9x9 доступно только в режиме 1x1'} }));
+                return ws.send(JSON.stringify({ type:'error', payload:{message:'9x9 только в 1x1'} }));
             }
             const roomId = genId();
             const room = {
                 id: roomId, name: roomName, mode, boardSize,
                 players: {},
                 maxSlots: { '1x1':2, '2x2':4, '3x3':9 }[mode],
-                game: null,
-                chatMessages: []
+                game: null, chatMessages: []
             };
             const playerId = genId();
-            room.players[playerId] = { id: playerId, nick, team, ready: false };
+            room.players[playerId] = { id: playerId, nick, team, ready: false, online: true };
             rooms.set(roomId, room);
             ws.roomId = roomId;
             ws.playerData = { id: playerId, team };
@@ -222,18 +210,12 @@ wss.on('connection', (ws) => {
             if (room.mode === '1x1' || room.mode === '2x2') {
                 const fullTeams = Object.entries(occupied).filter(([_,c])=>c===maxPerTeam).map(([t])=>t);
                 const startedTeams = Object.entries(occupied).filter(([_,c])=>c>0).map(([t])=>t);
-                if (fullTeams.length === 1 && startedTeams.length >= 2) {
-                    availableTeams = startedTeams;
-                }
+                if (fullTeams.length === 1 && startedTeams.length >= 2) availableTeams = startedTeams;
             }
-            if (!availableTeams.includes(team)) {
-                return ws.send(JSON.stringify({ type:'error', payload:{message:'Эта команда сейчас недоступна'} }));
-            }
-            if(occupied[team] >= maxPerTeam) {
-                return ws.send(JSON.stringify({ type:'error', payload:{message:'Команда заполнена'} }));
-            }
+            if (!availableTeams.includes(team)) return ws.send(JSON.stringify({ type:'error', payload:{message:'Команда недоступна'} }));
+            if(occupied[team] >= maxPerTeam) return ws.send(JSON.stringify({ type:'error', payload:{message:'Команда заполнена'} }));
             const playerId = genId();
-            room.players[playerId] = { id: playerId, nick, team, ready: false };
+            room.players[playerId] = { id: playerId, nick, team, ready: false, online: true };
             ws.roomId = room.id;
             ws.playerData = { id: playerId, team };
             ws.send(JSON.stringify({ type:'room_joined', payload: { roomId: room.id, playerId, team, room: getRoomPublic(room) } }));
@@ -246,20 +228,7 @@ wss.on('connection', (ws) => {
             player.ready = !player.ready;
             broadcastRoom(ws.roomId, { type:'room_update', payload: getRoomPublic(room) });
             const players = Object.values(room.players);
-            const allReady = players.every(p=>p.ready);
-            const enoughPlayers = players.length === room.maxSlots;
-            let canStart = allReady && enoughPlayers;
-            if (room.mode === '3x3' && canStart) {
-                const counts = { X:0, O:0, T:0 };
-                players.forEach(p => counts[p.team]++);
-                const activeTeams = Object.values(counts).filter(c => c > 0);
-                if (new Set(activeTeams).size > 1) {
-                    canStart = false;
-                }
-            }
-            if (canStart) {
-                startGame(room);
-            }
+            if(players.every(p=>p.ready) && players.length === room.maxSlots) startGame(room);
         }
         else if(type === 'leave_room') {
             handleLeaveRoom(ws);
@@ -276,37 +245,30 @@ wss.on('connection', (ws) => {
             if(lines.length > 0) {
                 lines.forEach(line => {
                     line.cells.forEach(([cx,cy]) => { game.blockedCells[`${cx},${cy}`] = true; });
-                    game.lines.push({
-                        x1: line.cells[0][0], y1: line.cells[0][1],
-                        x2: line.cells[2][0], y2: line.cells[2][1]
-                    });
+                    game.lines.push({ x1: line.cells[0][0], y1: line.cells[0][1], x2: line.cells[2][0], y2: line.cells[2][1] });
                     game.scores[line.team]++;
                 });
             }
-            advanceTurn(room);
+            nextTurn(room);
             if(!canAnyTeamFormLine(game.board, game.blockedCells, room.boardSize)) {
-                const max = Math.max(game.scores.X||0, game.scores.O||0, game.scores.T||0);
+                const max = Math.max(...Object.values(game.scores));
                 const winners = Object.entries(game.scores).filter(([_,v])=>v===max).map(([k])=>k);
                 game.winner = winners.length === 1 ? winners[0] : 'draw';
             }
-            broadcastRoom(ws.roomId, { type:'game_update', payload: game });
+            broadcastRoom(ws.roomId, { type:'game_update', payload: {
+                ...game,
+                players: room.players,
+                participatingTeams: game.teams.filter(t => game.scores[t] !== undefined || Object.values(room.players).some(p=>p.team===t))
+            } });
         }
         else if(type === 'chat_message') {
             const room = rooms.get(ws.roomId);
             if(!room || !ws.playerData) return;
             const { text } = payload;
             const player = room.players[ws.playerData.id];
-            if (!player) return;
+            if(!player) return;
             addRoomChatMessage(room, ws.playerData.id, player.nick, text, player.team);
-            broadcastRoom(ws.roomId, {
-                type: 'chat_message',
-                payload: {
-                    senderId: ws.playerData.id,
-                    senderNick: player.nick,
-                    text,
-                    team: player.team
-                }
-            });
+            broadcastRoom(ws.roomId, { type: 'chat_message', payload: { senderId: ws.playerData.id, senderNick: player.nick, text, team: player.team } });
         }
         else if(type === 'leave_game') {
             handleLeaveRoom(ws);
@@ -319,27 +281,22 @@ wss.on('connection', (ws) => {
 function handleLeaveRoom(ws) {
     const room = rooms.get(ws.roomId);
     if(!room) return;
-    if(ws.playerData) delete room.players[ws.playerData.id];
-    if(Object.keys(room.players).length === 0) {
-        rooms.delete(ws.roomId);
-        return;
-    }
-    if(room.game) {
-        if(room.mode === '1x1') {
-            const remaining = Object.values(room.players)[0];
-            room.game.winner = remaining ? remaining.team : 'draw';
-            broadcastRoom(ws.roomId, { type:'game_update', payload: room.game });
-        } else {
-            const teamsLeft = new Set(Object.values(room.players).map(p=>p.team));
-            if(teamsLeft.size === 1) {
-                room.game.winner = [...teamsLeft][0];
-                broadcastRoom(ws.roomId, { type:'game_update', payload: room.game });
-            } else {
-                broadcastRoom(ws.roomId, { type:'game_update', payload: room.game });
-            }
+    if (ws.playerData) {
+        const player = room.players[ws.playerData.id];
+        if (player) {
+            if (room.game) player.online = false; // помечаем оффлайн
+            else delete room.players[ws.playerData.id];
         }
     }
-    broadcastRoom(ws.roomId, { type:'room_update', payload: getRoomPublic(room) });
+    if (room.game) {
+        const onlinePlayers = Object.values(room.players).filter(p => p.online !== false);
+        const teamsLeft = new Set(onlinePlayers.map(p=>p.team));
+        if (teamsLeft.size === 1) room.game.winner = [...teamsLeft][0];
+        broadcastRoom(ws.roomId, { type:'game_update', payload: { ...room.game, players: room.players, participatingTeams: room.game.teams.filter(t => room.game.scores[t]!==undefined || onlinePlayers.some(p=>p.team===t)) } });
+    } else {
+        if (Object.keys(room.players).length === 0) rooms.delete(ws.roomId);
+        else broadcastRoom(ws.roomId, { type:'room_update', payload: getRoomPublic(room) });
+    }
 }
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
