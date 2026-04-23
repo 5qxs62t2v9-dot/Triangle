@@ -341,16 +341,13 @@
             padding: 8px 12px;
             border-radius: 18px;
             word-break: break-word;
+            color: white;
         }
         .chat-message.own {
             align-self: flex-end;
-            background: #5f7dcf;
-            color: white;
         }
         .chat-message.other {
             align-self: flex-start;
-            background: #eef2fb;
-            color: #1a1e2c;
         }
         .chat-nick {
             font-size: 0.8rem;
@@ -377,6 +374,18 @@
             align-items: center;
             gap: 8px;
         }
+        .rooms-header .toggle-btn {
+            flex: 1;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 18px center;
+            background-size: 20px;
+            padding-right: 48px;
+        }
+        .rooms-header .refresh-btn {
+            padding: 10px 16px;
+            flex: 0 0 auto;
+        }
         .rooms-list {
             background: #151b26;
             border-radius: 20px;
@@ -392,6 +401,10 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }
+        .room-entry.disabled {
+            opacity: 0.5;
+            pointer-events: none;
         }
         .room-entry:last-child { border: none; }
         .room-entry:hover { background: #252e44; }
@@ -453,8 +466,8 @@
             <!-- Список комнат онлайн -->
             <div class="rooms-list-container">
                 <div class="rooms-header">
-                    <button class="btn small" id="toggle-rooms-btn">Комнаты онлайн ▼</button>
-                    <button class="btn small" id="refresh-rooms-btn">↻</button>
+                    <button class="btn small toggle-btn" id="toggle-rooms-btn">Комнаты онлайн</button>
+                    <button class="btn small refresh-btn" id="refresh-rooms-btn">↻</button>
                 </div>
                 <div id="rooms-list" class="rooms-list hidden"></div>
             </div>
@@ -468,7 +481,12 @@
         <div class="flex-row">
             <button class="back-btn" id="room-leave">←</button>
             <h2 id="room-title"></h2>
-            <button class="chat-btn" id="room-chat-btn">💬<span id="chat-badge" class="chat-badge hidden"></span></button>
+            <button class="chat-btn" id="room-chat-btn">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#b0c2f0" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span id="chat-badge" class="chat-badge hidden"></span>
+            </button>
         </div>
         <div>Игроков: <span id="room-players-count">0/2</span></div>
         <div class="player-list" id="room-player-list"></div>
@@ -494,7 +512,12 @@
         <div class="game-header">
             <button class="back-btn" id="game-leave">←</button>
             <h3 id="game-room-name"></h3>
-            <button class="chat-btn" id="game-chat-btn">💬<span id="game-chat-badge" class="chat-badge hidden"></span></button>
+            <button class="chat-btn" id="game-chat-btn">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#b0c2f0" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span id="game-chat-badge" class="chat-badge hidden"></span>
+            </button>
         </div>
         <div class="game-canvas-container">
             <canvas id="game-canvas" width="450" height="450"></canvas>
@@ -505,7 +528,7 @@
             <button class="btn small primary" id="move-ok">OK</button>
         </div>
         <div id="game-result" class="result-table hidden"></div>
-        <!-- Чат в игре (тот же самый шаблон) -->
+        <!-- Чат в игре -->
         <div id="game-chat-modal" class="chat-modal hidden">
             <div class="chat-container">
                 <div class="flex-row" style="justify-content: space-between;">
@@ -545,11 +568,10 @@
         let myTeam = null;
         let gameState = null;
         let gameEnded = false;
-        let chatMessages = []; // локальный кеш сообщений
+        let chatMessages = [];
         let hasUnread = false;
         let chatOpen = false;
         
-        // Заготовки чата
         const chatPresets = [
             "Быстрее", "Ну?", "Спокойнее", "Сейчас", "Подождите", "Минуту",
             "Красава", "Гадина", "Спасибо", "Сам(а)", "Гуд игра", "Бэд игра",
@@ -645,11 +667,7 @@
                     btn.textContent = text;
                     btn.addEventListener('click', () => {
                         send({ type: 'chat_message', payload: { text } });
-                        if (chatOpen) {
-                            document.getElementById('chat-modal').classList.add('hidden');
-                            document.getElementById('game-chat-modal').classList.add('hidden');
-                            chatOpen = false;
-                        }
+                        // Не закрываем чат
                     });
                     container.appendChild(btn);
                 });
@@ -660,7 +678,6 @@
             document.getElementById('close-chat').addEventListener('click', closeChat);
             document.getElementById('close-game-chat').addEventListener('click', closeChat);
             
-            // Закрытие по клику вне окна
             document.querySelectorAll('.chat-modal').forEach(m => m.addEventListener('click', (e) => {
                 if (e.target === m) closeChat();
             }));
@@ -697,11 +714,10 @@
             chatMessages.forEach(msg => {
                 const div = document.createElement('div');
                 div.className = `chat-message ${msg.isOwn ? 'own' : 'other'}`;
+                div.style.backgroundColor = getTeamColor(msg.team);
                 if (!msg.isOwn) {
-                    div.style.backgroundColor = '#eef2fb';
-                    div.innerHTML = `<div class="chat-nick" style="color:${getTeamColor(msg.team)}">${msg.senderNick}</div>${msg.text}`;
+                    div.innerHTML = `<div class="chat-nick">${msg.senderNick}</div>${msg.text}`;
                 } else {
-                    div.style.backgroundColor = getTeamColor(myTeam);
                     div.textContent = msg.text;
                 }
                 container.appendChild(div);
@@ -726,7 +742,8 @@
         document.getElementById('toggle-rooms-btn').addEventListener('click', () => {
             roomsListVisible = !roomsListVisible;
             document.getElementById('rooms-list').classList.toggle('hidden', !roomsListVisible);
-            document.getElementById('toggle-rooms-btn').textContent = roomsListVisible ? 'Комнаты онлайн ▲' : 'Комнаты онлайн ▼';
+            const btn = document.getElementById('toggle-rooms-btn');
+            btn.innerHTML = roomsListVisible ? 'Комнаты онлайн ▲' : 'Комнаты онлайн ▼';
             if (roomsListVisible) send({ type: 'get_rooms' });
         });
         document.getElementById('refresh-rooms-btn').addEventListener('click', () => send({ type: 'get_rooms' }));
@@ -741,8 +758,13 @@
             rooms.forEach(room => {
                 const div = document.createElement('div');
                 div.className = 'room-entry';
+                if (room.players >= room.maxSlots) div.classList.add('disabled');
                 div.innerHTML = `<span>${room.name} (${room.mode})</span><span>${room.players}/${room.maxSlots}</span>`;
                 div.addEventListener('click', () => {
+                    if (room.players >= room.maxSlots) {
+                        alert('Комната заполнена');
+                        return;
+                    }
                     document.getElementById('join-room-name').value = room.name;
                     send({ type:'check_room', payload: { roomName: room.name } });
                 });
@@ -750,7 +772,7 @@
             });
         }
         
-        // ---------- Остальной код (рендер комнаты, игры и т.д.) ----------
+        // ---------- Остальной код ----------
         function updateRoomUI(room) {
             document.getElementById('room-title').innerText = room.name;
             const maxSlots = { '1x1':2, '2x2':4, '3x3':9 }[room.mode];
@@ -784,8 +806,9 @@
             const maxPerTeam = { '1x1':1, '2x2':2, '3x3':3 }[mode];
             const occupied = roomInfo.occupied || { X:0, O:0, T:0 };
             let availableTeams = ['X','O','T'];
-            if (mode === '2x2') {
-                const fullTeams = Object.entries(occupied).filter(([_,c])=>c===2).map(([t])=>t);
+            // Логика ограничений для 1x1 и 2x2
+            if (mode === '1x1' || mode === '2x2') {
+                const fullTeams = Object.entries(occupied).filter(([_,c])=>c===maxPerTeam).map(([t])=>t);
                 const startedTeams = Object.entries(occupied).filter(([_,c])=>c>0).map(([t])=>t);
                 if (fullTeams.length === 1 && startedTeams.length >= 2) {
                     availableTeams = startedTeams;
@@ -943,7 +966,7 @@
             });
         }
         
-        // Инициализация обработчиков
+        // Инициализация
         document.getElementById('play-btn').addEventListener('click', ()=>{
             showScreen('lobby');
             setLobbyTab('create');
@@ -1014,7 +1037,6 @@
         });
         document.getElementById('move-cancel').addEventListener('click', ()=>{ selectedCell = null; renderGame(); });
         
-        // Чат инициализация
         initChat();
         updateStatsDisplay();
         connectWebSocket();
