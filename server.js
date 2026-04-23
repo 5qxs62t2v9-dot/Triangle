@@ -9,7 +9,6 @@ const rooms = new Map();
 
 function genId() { return Math.random().toString(36).substr(2, 8); }
 
-// Проверка на возможность собрать тройку
 function canAnyTeamFormLine(board, blocked, boardSize) {
     const teams = ['X','O','T'];
     const dirs = [[1,0],[0,1],[1,1],[1,-1]];
@@ -147,13 +146,12 @@ function getActiveRooms() {
     return active;
 }
 
-// Проверка возможности начать игру (равное количество в непустых командах)
 function canStartWithPlayers(room) {
     const players = Object.values(room.players);
     const counts = { X:0, O:0, T:0 };
     players.forEach(p => counts[p.team]++);
     const activeTeams = Object.entries(counts).filter(([_,c]) => c > 0);
-    if (activeTeams.length < 2) return false; // минимум две команды
+    if (activeTeams.length < 2) return false;
     const firstCount = activeTeams[0][1];
     if (!activeTeams.every(([_,c]) => c === firstCount)) return false;
     if (room.mode === '2x2' && activeTeams.length > 2) return false;
@@ -185,6 +183,9 @@ wss.on('connection', (ws) => {
 
         if(type === 'create') {
             const { mode, roomName, team, boardSize, nick } = payload;
+            if (roomName.length > 15) {
+                return ws.send(JSON.stringify({ type:'error', payload:{message:'Название комнаты не должно превышать 15 символов'} }));
+            }
             if (boardSize === 9 && mode !== '1x1') {
                 return ws.send(JSON.stringify({ type:'error', payload:{message:'9x9 доступно только в 1x1'} }));
             }
@@ -222,20 +223,13 @@ wss.on('connection', (ws) => {
             const occupied = { X:0, O:0, T:0 };
             Object.values(room.players).forEach(p => occupied[p.team]++);
             
-            // Определяем доступные команды с учётом ограничений
             let availableTeams = ['X','O','T'];
-            
-            // Логика для 2x2 и 1x1: если две команды уже "затронуты" (хотя бы один игрок),
-            // третья команда недоступна
             if (mode === '2x2' || mode === '1x1') {
                 const teamsWithPlayers = Object.entries(occupied).filter(([_,c]) => c > 0).map(([t]) => t);
                 if (teamsWithPlayers.length >= 2) {
-                    // Оставляем только те команды, в которых уже есть игроки
                     availableTeams = teamsWithPlayers;
                 }
-                // Для 1x1 максимум одна команда, другая обязательно
                 if (mode === '1x1' && teamsWithPlayers.length === 2) {
-                    // В 1x1 две команды уже заняты – третью нельзя
                     availableTeams = teamsWithPlayers;
                 }
             }
