@@ -9,6 +9,22 @@ const rooms = new Map();
 
 function genId() { return Math.random().toString(36).substr(2, 8); }
 
+// --- функция keep-alive ---
+function keepAlive() {
+    setInterval(() => {
+        http.get(`http://localhost:${PORT}/`, (res) => {
+            // просто потребляем ответ, чтобы соединение завершилось
+            res.on('data', () => {});
+            res.on('end', () => {
+                console.log('В норме');
+            });
+        }).on('error', (err) => {
+            console.error('Keep-alive error:', err.message);
+        });
+    }, 15000); // каждые 15 секунд
+}
+
+// Проверка на возможность собрать тройку
 function canAnyTeamFormLine(board, blocked, boardSize) {
     const teams = ['X','O','T'];
     const dirs = [[1,0],[0,1],[1,1],[1,-1]];
@@ -341,4 +357,7 @@ function handleLeaveRoom(ws) {
     }
 }
 
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    keepAlive(); // запускаем пинг после старта
+});
