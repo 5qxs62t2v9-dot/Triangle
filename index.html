@@ -115,14 +115,6 @@
         .lobby-actions .btn {
             flex: 1;
         }
-        .room-actions {
-            display: flex;
-            gap: 15px;
-            width: 100%;
-        }
-        .room-actions .btn {
-            flex: 1;
-        }
         .input-group {
             display: flex;
             flex-direction: column;
@@ -218,6 +210,26 @@
             padding: 0 10px;
             line-height: 1;
         }
+        .chat-btn {
+            background: none;
+            border: none;
+            font-size: 2rem;
+            cursor: pointer;
+            color: #b0c2f0;
+            padding: 0 5px;
+            position: relative;
+            margin-left: auto;
+        }
+        .chat-badge {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 12px;
+            height: 12px;
+            background: #e74c3c;
+            border-radius: 50%;
+            border: 2px solid #1a1e2c;
+        }
         .game-canvas-container {
             display: flex;
             justify-content: center;
@@ -276,12 +288,6 @@
             align-items: center;
             gap: 8px;
         }
-        .result-team svg {
-            width: 24px;
-            height: 24px;
-            display: inline-block;
-            vertical-align: middle;
-        }
         .result-score {
             font-size: 1.5rem;
             font-weight: bold;
@@ -292,17 +298,103 @@
         .full-width {
             width: 100%;
         }
-        .winner-announce {
+        .room-actions {
+            display: flex;
+            gap: 15px;
+        }
+        .room-actions .btn {
+            flex: 1;
+        }
+        /* Чат */
+        .chat-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
             display: flex;
             align-items: center;
             justify-content: center;
+            z-index: 1000;
+        }
+        .chat-container {
+            width: 90%;
+            max-width: 400px;
+            background: #1e2538;
+            border-radius: 32px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-height: 80vh;
+        }
+        .chat-messages {
+            background: #151b26;
+            border-radius: 20px;
+            padding: 12px;
+            height: 200px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
             gap: 8px;
+        }
+        .chat-message {
+            max-width: 80%;
+            padding: 8px 12px;
+            border-radius: 18px;
+            word-break: break-word;
+        }
+        .chat-message.own {
+            align-self: flex-end;
+            background: #5f7dcf;
+            color: white;
+        }
+        .chat-message.other {
+            align-self: flex-start;
+            background: #eef2fb;
+            color: #1a1e2c;
+        }
+        .chat-nick {
+            font-size: 0.8rem;
+            opacity: 0.8;
+            margin-bottom: 4px;
+        }
+        .chat-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+        .chat-buttons .btn {
+            flex: 0 0 auto;
+            padding: 8px 12px;
+            font-size: 0.9rem;
+        }
+        /* Список комнат */
+        .rooms-list-container {
             margin-top: 10px;
         }
-        .winner-announce svg {
-            width: 24px;
-            height: 24px;
+        .rooms-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
+        .rooms-list {
+            background: #151b26;
+            border-radius: 20px;
+            padding: 8px;
+            margin-top: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .room-entry {
+            padding: 10px 12px;
+            border-bottom: 1px solid #2e3a55;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .room-entry:last-child { border: none; }
+        .room-entry:hover { background: #252e44; }
     </style>
 </head>
 <body>
@@ -358,6 +450,14 @@
             <div class="input-group">
                 <button class="btn small" id="check-room-btn">Проверить</button>
             </div>
+            <!-- Список комнат онлайн -->
+            <div class="rooms-list-container">
+                <div class="rooms-header">
+                    <button class="btn small" id="toggle-rooms-btn">Комнаты онлайн ▼</button>
+                    <button class="btn small" id="refresh-rooms-btn">↻</button>
+                </div>
+                <div id="rooms-list" class="rooms-list hidden"></div>
+            </div>
             <div class="team-selector" id="join-team-selector"></div>
             <button class="btn primary full-width" id="confirm-join">Присоединиться</button>
         </div>
@@ -368,12 +468,24 @@
         <div class="flex-row">
             <button class="back-btn" id="room-leave">←</button>
             <h2 id="room-title"></h2>
+            <button class="chat-btn" id="room-chat-btn">💬<span id="chat-badge" class="chat-badge hidden"></span></button>
         </div>
         <div>Игроков: <span id="room-players-count">0/2</span></div>
         <div class="player-list" id="room-player-list"></div>
         <div class="room-actions">
             <button class="btn warning" id="room-leave-btn">Выйти</button>
             <button class="btn primary" id="room-ready-btn">Начать</button>
+        </div>
+        <!-- Чат (скрыт) -->
+        <div id="chat-modal" class="chat-modal hidden">
+            <div class="chat-container">
+                <div class="flex-row" style="justify-content: space-between;">
+                    <h3>Чат</h3>
+                    <button class="back-btn" id="close-chat" style="font-size: 1.5rem;">✕</button>
+                </div>
+                <div id="chat-messages" class="chat-messages"></div>
+                <div id="chat-buttons" class="chat-buttons"></div>
+            </div>
         </div>
     </div>
 
@@ -382,6 +494,7 @@
         <div class="game-header">
             <button class="back-btn" id="game-leave">←</button>
             <h3 id="game-room-name"></h3>
+            <button class="chat-btn" id="game-chat-btn">💬<span id="game-chat-badge" class="chat-badge hidden"></span></button>
         </div>
         <div class="game-canvas-container">
             <canvas id="game-canvas" width="450" height="450"></canvas>
@@ -392,6 +505,17 @@
             <button class="btn small primary" id="move-ok">OK</button>
         </div>
         <div id="game-result" class="result-table hidden"></div>
+        <!-- Чат в игре (тот же самый шаблон) -->
+        <div id="game-chat-modal" class="chat-modal hidden">
+            <div class="chat-container">
+                <div class="flex-row" style="justify-content: space-between;">
+                    <h3>Чат</h3>
+                    <button class="back-btn" id="close-game-chat" style="font-size: 1.5rem;">✕</button>
+                </div>
+                <div id="game-chat-messages" class="chat-messages"></div>
+                <div id="game-chat-buttons" class="chat-buttons"></div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -399,7 +523,7 @@
     (function(){
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.addEventListener('gesturestart', e => e.preventDefault());
-        document.addEventListener('touchmove', e => { if (e.target.tagName !== 'INPUT') e.preventDefault(); }, { passive: false });
+        document.addEventListener('touchmove', e => { if (e.target.tagName !== 'INPUT' && !e.target.closest('.chat-messages')) e.preventDefault(); }, { passive: false });
         document.addEventListener('selectstart', e => e.preventDefault());
         
         const SVG = {
@@ -421,6 +545,16 @@
         let myTeam = null;
         let gameState = null;
         let gameEnded = false;
+        let chatMessages = []; // локальный кеш сообщений
+        let hasUnread = false;
+        let chatOpen = false;
+        
+        // Заготовки чата
+        const chatPresets = [
+            "Быстрее", "Ну?", "Спокойнее", "Сейчас", "Подождите", "Минуту",
+            "Красава", "Гадина", "Спасибо", "Сам(а)", "Гуд игра", "Бэд игра",
+            "Повторим?", "Да", "Нет", "Не мой гендер", "Пока"
+        ];
         
         let stats = JSON.parse(localStorage.getItem('triangle_stats')) || {'1x1':[0,0],'2x2':[0,0],'3x3':[0,0]};
         
@@ -439,8 +573,7 @@
             screens[name].classList.remove('hidden');
             currentScreen = name;
             gameEnded = false;
-            // Скрываем результаты при уходе с игрового экрана
-            document.getElementById('game-result').classList.add('hidden');
+            if (name === 'game') document.getElementById('game-result').classList.add('hidden');
         }
         
         function updateStatsDisplay() {
@@ -477,6 +610,8 @@
                 updateRoomUI(payload);
             } else if(type === 'room_info') {
                 updateJoinTeamSelector(payload);
+            } else if(type === 'rooms_list') {
+                renderRoomsList(payload.rooms);
             } else if(type === 'game_started') {
                 gameState = payload;
                 gameEnded = false;
@@ -490,11 +625,132 @@
                     gameEnded = true;
                     showGameResult();
                 }
+            } else if(type === 'chat_message') {
+                addChatMessage(payload);
             } else if(type === 'error') {
                 alert(payload.message);
             }
         }
         
+        // ---------- Чат ----------
+        function initChat() {
+            renderChatMessages();
+            const btnsContainer = document.getElementById('chat-buttons');
+            const gameBtnsContainer = document.getElementById('game-chat-buttons');
+            [btnsContainer, gameBtnsContainer].forEach(container => {
+                container.innerHTML = '';
+                chatPresets.forEach(text => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn small';
+                    btn.textContent = text;
+                    btn.addEventListener('click', () => {
+                        send({ type: 'chat_message', payload: { text } });
+                        if (chatOpen) {
+                            document.getElementById('chat-modal').classList.add('hidden');
+                            document.getElementById('game-chat-modal').classList.add('hidden');
+                            chatOpen = false;
+                        }
+                    });
+                    container.appendChild(btn);
+                });
+            });
+            
+            document.getElementById('room-chat-btn').addEventListener('click', openChat);
+            document.getElementById('game-chat-btn').addEventListener('click', openChat);
+            document.getElementById('close-chat').addEventListener('click', closeChat);
+            document.getElementById('close-game-chat').addEventListener('click', closeChat);
+            
+            // Закрытие по клику вне окна
+            document.querySelectorAll('.chat-modal').forEach(m => m.addEventListener('click', (e) => {
+                if (e.target === m) closeChat();
+            }));
+        }
+        
+        function openChat() {
+            const modal = currentScreen === 'room' ? 'chat-modal' : 'game-chat-modal';
+            document.getElementById(modal).classList.remove('hidden');
+            chatOpen = true;
+            hasUnread = false;
+            updateChatBadge();
+            renderChatMessages();
+        }
+        
+        function closeChat() {
+            document.getElementById('chat-modal').classList.add('hidden');
+            document.getElementById('game-chat-modal').classList.add('hidden');
+            chatOpen = false;
+        }
+        
+        function addChatMessage({ senderId, senderNick, text, team }) {
+            const isOwn = senderId === myPlayerId;
+            chatMessages.push({ isOwn, senderNick, text, team });
+            if (chatMessages.length > 5) chatMessages.shift();
+            if (!chatOpen && !isOwn) hasUnread = true;
+            updateChatBadge();
+            if (chatOpen) renderChatMessages();
+        }
+        
+        function renderChatMessages() {
+            const msgDiv = currentScreen === 'room' ? 'chat-messages' : 'game-chat-messages';
+            const container = document.getElementById(msgDiv);
+            container.innerHTML = '';
+            chatMessages.forEach(msg => {
+                const div = document.createElement('div');
+                div.className = `chat-message ${msg.isOwn ? 'own' : 'other'}`;
+                if (!msg.isOwn) {
+                    div.style.backgroundColor = '#eef2fb';
+                    div.innerHTML = `<div class="chat-nick" style="color:${getTeamColor(msg.team)}">${msg.senderNick}</div>${msg.text}`;
+                } else {
+                    div.style.backgroundColor = getTeamColor(myTeam);
+                    div.textContent = msg.text;
+                }
+                container.appendChild(div);
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function updateChatBadge() {
+            const badge = document.getElementById('chat-badge');
+            const gameBadge = document.getElementById('game-chat-badge');
+            if (hasUnread) {
+                badge.classList.remove('hidden');
+                gameBadge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+                gameBadge.classList.add('hidden');
+            }
+        }
+        
+        // ---------- Список комнат ----------
+        let roomsListVisible = false;
+        document.getElementById('toggle-rooms-btn').addEventListener('click', () => {
+            roomsListVisible = !roomsListVisible;
+            document.getElementById('rooms-list').classList.toggle('hidden', !roomsListVisible);
+            document.getElementById('toggle-rooms-btn').textContent = roomsListVisible ? 'Комнаты онлайн ▲' : 'Комнаты онлайн ▼';
+            if (roomsListVisible) send({ type: 'get_rooms' });
+        });
+        document.getElementById('refresh-rooms-btn').addEventListener('click', () => send({ type: 'get_rooms' }));
+        
+        function renderRoomsList(rooms) {
+            const listDiv = document.getElementById('rooms-list');
+            listDiv.innerHTML = '';
+            if (!rooms || rooms.length === 0) {
+                listDiv.innerHTML = '<div style="padding:10px;text-align:center;">Нет активных комнат</div>';
+                return;
+            }
+            rooms.forEach(room => {
+                const div = document.createElement('div');
+                div.className = 'room-entry';
+                div.innerHTML = `<span>${room.name} (${room.mode})</span><span>${room.players}/${room.maxSlots}</span>`;
+                div.addEventListener('click', () => {
+                    document.getElementById('join-room-name').value = room.name;
+                    send({ type:'check_room', payload: { roomName: room.name } });
+                });
+                listDiv.appendChild(div);
+            });
+        }
+        
+        // ---------- Остальной код (рендер комнаты, игры и т.д.) ----------
         function updateRoomUI(room) {
             document.getElementById('room-title').innerText = room.name;
             const maxSlots = { '1x1':2, '2x2':4, '3x3':9 }[room.mode];
@@ -519,7 +775,6 @@
                     listDiv.appendChild(div);
                 });
             });
-            document.getElementById('room-ready-btn').disabled = false;
         }
         
         function updateJoinTeamSelector(roomInfo) {
@@ -663,13 +918,10 @@
             const teams = Object.keys(scores).filter(t => scores[t] !== undefined);
             let html = '';
             teams.forEach(team => {
-                html += `<div class="result-row"><div class="result-team">${getTeamIcon(team)} <span>${getTeamName(team)}</span></div><div class="result-score">${scores[team]}</div></div>`;
+                html += `<div class="result-row"><div class="result-team">${getTeamIcon(team)} ${getTeamName(team)}</div><div class="result-score">${scores[team]}</div></div>`;
             });
-            if(gameState.winner === 'draw') {
-                html += '<div class="winner-announce">Ничья!</div>';
-            } else {
-                html += `<div class="winner-announce">Победитель: ${getTeamIcon(gameState.winner)} <span>${getTeamName(gameState.winner)}</span></div>`;
-            }
+            if(gameState.winner === 'draw') html += '<div style="text-align:center; margin-top:10px;">Ничья!</div>';
+            else html += `<div style="text-align:center; margin-top:10px;">Победитель: <span style="display:inline-flex;align-items:center;gap:4px;">${getTeamName(gameState.winner)} ${getTeamIcon(gameState.winner)}</span></div>`;
             resultDiv.innerHTML = html;
             if(gameState.winner !== 'draw' && gameState.winner === myTeam) addWin(selectedMode);
             else if(gameState.winner !== 'draw') addLoss(selectedMode);
@@ -691,6 +943,7 @@
             });
         }
         
+        // Инициализация обработчиков
         document.getElementById('play-btn').addEventListener('click', ()=>{
             showScreen('lobby');
             setLobbyTab('create');
@@ -700,11 +953,13 @@
         document.getElementById('create-room-tab').addEventListener('click', ()=> setLobbyTab('create'));
         document.getElementById('join-room-tab').addEventListener('click', ()=> setLobbyTab('join'));
         document.getElementById('create-mode-select').addEventListener('change', updateBoardSizeOptions);
+        
         document.getElementById('check-room-btn').addEventListener('click', ()=>{
             const name = document.getElementById('join-room-name').value.trim();
             if(!name) return alert('Введите название');
             send({ type:'check_room', payload: { roomName: name } });
         });
+        
         document.getElementById('confirm-create').addEventListener('click', ()=>{
             const roomName = document.getElementById('create-room-name').value.trim();
             if(!roomName) return alert('Введите название');
@@ -717,6 +972,7 @@
             selectedMode = mode;
             send({ type:'create', payload:{ mode, roomName, team: selected.dataset.team, boardSize, nick:nickname } });
         });
+        
         document.getElementById('confirm-join').addEventListener('click', ()=>{
             const roomName = document.getElementById('join-room-name').value.trim();
             if(!roomName) return alert('Введите название');
@@ -726,12 +982,14 @@
             localStorage.setItem('nick', nickname);
             send({ type:'join', payload:{ roomName, team: selected.dataset.team, nick:nickname } });
         });
+        
         document.getElementById('room-leave').addEventListener('click', ()=> { if(confirm('Выйти?')) { send({type:'leave_room'}); showScreen('lobby'); } });
         document.getElementById('room-leave-btn').addEventListener('click', ()=> { if(confirm('Выйти?')) { send({type:'leave_room'}); showScreen('lobby'); } });
         document.getElementById('room-ready-btn').addEventListener('click', ()=> send({ type:'toggle_ready' }));
         document.getElementById('game-leave').addEventListener('click', ()=>{
             if(confirm('Покинуть игру?')) { send({type:'leave_game'}); showScreen('menu'); }
         });
+        
         canvas.addEventListener('click', (e) => {
             if(gameEnded || !gameState || gameState.currentTurn !== myTeam || gameState.turnPlayer !== myPlayerId) return;
             const rect = canvas.getBoundingClientRect();
@@ -746,6 +1004,7 @@
             selectedCell = {x,y};
             renderGame();
         });
+        
         document.getElementById('move-ok').addEventListener('click', ()=>{
             if(selectedCell) {
                 send({ type:'make_move', payload: selectedCell });
@@ -755,6 +1014,8 @@
         });
         document.getElementById('move-cancel').addEventListener('click', ()=>{ selectedCell = null; renderGame(); });
         
+        // Чат инициализация
+        initChat();
         updateStatsDisplay();
         connectWebSocket();
         showScreen('menu');
