@@ -382,6 +382,11 @@
             background-size: 20px;
             padding-right: 48px;
         }
+        /* Убираем нативную стрелку при фокусе/активе */
+        .rooms-header .toggle-btn:focus, .rooms-header .toggle-btn:active {
+            outline: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        }
         .rooms-header .refresh-btn {
             padding: 10px 16px;
             flex: 0 0 auto;
@@ -408,6 +413,33 @@
         }
         .room-entry:last-child { border: none; }
         .room-entry:hover { background: #252e44; }
+        /* Панель очерёдности ходов */
+        .turn-order-panel {
+            background: #1e2538;
+            border-radius: 20px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .turn-team-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .turn-player {
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: #2e3a55;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .turn-player.current {
+            background: #ffd966;
+            color: #1a1e2c;
+        }
     </style>
 </head>
 <body>
@@ -522,6 +554,8 @@
         <div class="game-canvas-container">
             <canvas id="game-canvas" width="450" height="450"></canvas>
         </div>
+        <!-- Панель очерёдности ходов -->
+        <div id="turn-order-panel" class="turn-order-panel hidden"></div>
         <div class="turn-indicator" id="turn-indicator">Ваш ход</div>
         <div id="move-controls" class="move-actions hidden">
             <button class="btn small" id="move-cancel">Отмена</button>
@@ -595,7 +629,10 @@
             screens[name].classList.remove('hidden');
             currentScreen = name;
             gameEnded = false;
-            if (name === 'game') document.getElementById('game-result').classList.add('hidden');
+            if (name === 'game') {
+                document.getElementById('game-result').classList.add('hidden');
+                document.getElementById('turn-order-panel').classList.remove('hidden');
+            }
         }
         
         function updateStatsDisplay() {
@@ -640,9 +677,11 @@
                 showScreen('game');
                 document.getElementById('game-room-name').innerText = payload.roomName || '';
                 renderGame();
+                renderTurnOrder();
             } else if(type === 'game_update') {
                 gameState = payload;
                 renderGame();
+                renderTurnOrder();
                 if(gameState.winner) {
                     gameEnded = true;
                     showGameResult();
@@ -667,7 +706,6 @@
                     btn.textContent = text;
                     btn.addEventListener('click', () => {
                         send({ type: 'chat_message', payload: { text } });
-                        // Не закрываем чат
                     });
                     container.appendChild(btn);
                 });
@@ -739,7 +777,8 @@
         
         // ---------- Список комнат ----------
         let roomsListVisible = false;
-        document.getElementById('toggle-rooms-btn').addEventListener('click', () => {
+        document.getElementById('toggle-rooms-btn').addEventListener('click', (e) => {
+            e.preventDefault();
             roomsListVisible = !roomsListVisible;
             document.getElementById('rooms-list').classList.toggle('hidden', !roomsListVisible);
             const btn = document.getElementById('toggle-rooms-btn');
@@ -806,7 +845,6 @@
             const maxPerTeam = { '1x1':1, '2x2':2, '3x3':3 }[mode];
             const occupied = roomInfo.occupied || { X:0, O:0, T:0 };
             let availableTeams = ['X','O','T'];
-            // Логика ограничений для 1x1 и 2x2
             if (mode === '1x1' || mode === '2x2') {
                 const fullTeams = Object.entries(occupied).filter(([_,c])=>c===maxPerTeam).map(([t])=>t);
                 const startedTeams = Object.entries(occupied).filter(([_,c])=>c>0).map(([t])=>t);
@@ -932,6 +970,30 @@
         function drawTriangle(cx,cy,color,size){
             ctx.strokeStyle=color; ctx.lineWidth=Math.max(3, size/8);
             ctx.beginPath(); ctx.moveTo(cx, cy-size/2); ctx.lineTo(cx+size/2, cy+size/3); ctx.lineTo(cx-size/2, cy+size/3); ctx.closePath(); ctx.stroke();
+        }
+        
+        function renderTurnOrder() {
+            if (!gameState || !gameState.turnOrder) return;
+            const panel = document.getElementById('turn-order-panel');
+            const to = gameState.turnOrder;
+            const teams = to.teams;
+            let html = '';
+            // Для каждой команды показываем игроков
+            teams.forEach(team => {
+                const players = to.teamPlayers[team] || [];
+                const playerNicks = players.map(pid => {
+                    const p = gameState.players ? gameState.players[pid] : null;
+                    return p ? p.nick : pid;
+                });
+                html += `<div class="turn-team-row">`;
+                html += `<span style="color:${getTeamColor(team)}; font-weight:bold;">${getTeamName(team)} ${getTeamIcon(team)}</span>`;
+                playerNicks.forEach((nick, idx) => {
+                    const isCurrent = (team === gameState.currentTurn && players[idx] === gameState.turnPlayer);
+                    html += `<span class="turn-player ${isCurrent ? 'current' : ''}">${nick}</span>`;
+                });
+                html += `</div>`;
+            });
+            panel.innerHTML = html;
         }
         
         function showGameResult() {
