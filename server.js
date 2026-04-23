@@ -5,10 +5,12 @@ const WebSocket = require('ws');
 
 const PORT = process.env.PORT || 8080;
 
+// Хранилище комнат
 const rooms = new Map();
 
 function genId() { return Math.random().toString(36).substr(2, 8); }
 
+// Проверка, можно ли ещё собрать тройку (любой командой)
 function canAnyTeamFormLine(board, blocked, boardSize) {
     const teams = ['X','O','T'];
     const dirs = [[1,0],[0,1],[1,1],[1,-1]];
@@ -119,6 +121,29 @@ function broadcastRoom(roomId, message) {
     });
 }
 
+// Добавление сообщения в историю чата комнаты (храним не более 5)
+function addRoomChatMessage(room, senderId, senderNick, text, team) {
+    if (!room.chatMessages) room.chatMessages = [];
+    room.chatMessages.push({ senderId, senderNick, text, team, timestamp: Date.now() });
+    if (room.chatMessages.length > 5) room.chatMessages.shift();
+}
+
+// Получение списка активных комнат (игра не начата)
+function getActiveRooms() {
+    const active = [];
+    for (let room of rooms.values()) {
+        if (!room.game) {
+            active.push({
+                name: room.name,
+                mode: room.mode,
+                players: Object.keys(room.players).length,
+                maxSlots: room.maxSlots
+            });
+        }
+    }
+    return active;
+}
+
 const server = http.createServer((req, res) => {
     if (req.url === '/' || req.url === '/index.html') {
         fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
@@ -151,7 +176,8 @@ wss.on('connection', (ws) => {
                 id: roomId, name: roomName, mode, boardSize,
                 players: {},
                 maxSlots: { '1x1':2, '2x2':4, '3x3':9 }[mode],
-                game: null
+                game: null,
+                chatMessages: [] // история чата
             };
             const playerId = genId();
             room.players[playerId] = { id: playerId, nick, team, ready: false };
@@ -166,6 +192,9 @@ wss.on('connection', (ws) => {
             const occupied = { X:0, O:0, T:0 };
             Object.values(room.players).forEach(p => occupied[p.team]++);
             ws.send(JSON.stringify({ type:'room_info', payload: { mode: room.mode, occupied, boardSize: room.boardSize } }));
+        }
+        else if(type === 'get_rooms') {
+            ws.send(JSON.stringify({ type:'rooms_list', payload: { rooms: getActiveRooms() } }));
         }
         else if(type === 'join') {
             const { roomName, team, nick } = payload;
@@ -246,6 +275,23 @@ wss.on('connection', (ws) => {
                 game.winner = winners.length === 1 ? winners[0] : 'draw';
             }
             broadcastRoom(ws.roomId, { type:'game_update', payload: game });
+        }
+        else if(type === 'chat_message') {
+            const room = rooms.get(ws.roomId);
+            if(!room || !ws.playerData) return;
+            const { text } = payload;
+            const player = room.players[ws.playerData.id];
+            if (!player) return;
+            addRoomChatMessage(room, ws.playerData.id, player.nick, text, player.team);
+            broadcastRoom(ws.roomId, {
+                type: 'chat_message',
+                payload: {
+                    senderId: ws.playerData.id,
+                    senderNick: player.nick,
+                    text,
+                    team: player.team
+                }
+            });
         }
         else if(type === 'leave_game') {
             handleLeaveRoom(ws);
