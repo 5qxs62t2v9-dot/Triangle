@@ -183,7 +183,13 @@
             border-bottom: 1px solid #334十五;
         }
         .player-item:last-child { border-bottom: none; }
-        .player-nick { flex: 1; }
+        .player-nick {
+            flex: 1;
+        }
+        .player-nick.offline {
+            text-decoration: line-through;
+            opacity: 0.7;
+        }
         .player-team-icon svg {
             width: 24px;
             height: 24px;
@@ -355,14 +361,12 @@
             margin-bottom: 4px;
         }
         .chat-buttons {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
             gap: 8px;
-            justify-content: center;
         }
         .chat-buttons .btn {
-            flex: 0 0 auto;
-            padding: 8px 12px;
+            padding: 8px 4px;
             font-size: 0.9rem;
         }
         /* Список комнат */
@@ -372,30 +376,16 @@
         .rooms-header {
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: space-between;
+            margin-bottom: 8px;
         }
-        .rooms-header .toggle-btn {
-            flex: 1;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 18px center;
-            background-size: 20px;
-            padding-right: 48px;
-        }
-        /* Убираем нативную стрелку при фокусе/активе */
-        .rooms-header .toggle-btn:focus, .rooms-header .toggle-btn:active {
-            outline: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-        }
-        .rooms-header .refresh-btn {
-            padding: 10px 16px;
-            flex: 0 0 auto;
+        .rooms-header span {
+            font-weight: bold;
         }
         .rooms-list {
             background: #151b26;
             border-radius: 20px;
             padding: 8px;
-            margin-top: 8px;
             max-height: 200px;
             overflow-y: auto;
         }
@@ -413,32 +403,10 @@
         }
         .room-entry:last-child { border: none; }
         .room-entry:hover { background: #252e44; }
-        /* Панель очерёдности ходов */
-        .turn-order-panel {
-            background: #1e2538;
-            border-radius: 20px;
-            padding: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .turn-team-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        .turn-player {
-            padding: 4px 12px;
-            border-radius: 20px;
-            background: #2e3a55;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .turn-player.current {
-            background: #ffd966;
-            color: #1a1e2c;
+        /* Выделение текущего игрока */
+        .current-turn {
+            background: rgba(255, 255, 150, 0.2);
+            border-radius: 12px;
         }
     </style>
 </head>
@@ -498,10 +466,10 @@
             <!-- Список комнат онлайн -->
             <div class="rooms-list-container">
                 <div class="rooms-header">
-                    <button class="btn small toggle-btn" id="toggle-rooms-btn">Комнаты онлайн</button>
-                    <button class="btn small refresh-btn" id="refresh-rooms-btn">↻</button>
+                    <span>Комнаты онлайн</span>
+                    <button class="btn small" id="refresh-rooms-btn" style="flex:0;">↻</button>
                 </div>
-                <div id="rooms-list" class="rooms-list hidden"></div>
+                <div id="rooms-list" class="rooms-list"></div>
             </div>
             <div class="team-selector" id="join-team-selector"></div>
             <button class="btn primary full-width" id="confirm-join">Присоединиться</button>
@@ -554,13 +522,14 @@
         <div class="game-canvas-container">
             <canvas id="game-canvas" width="450" height="450"></canvas>
         </div>
-        <!-- Панель очерёдности ходов -->
-        <div id="turn-order-panel" class="turn-order-panel hidden"></div>
         <div class="turn-indicator" id="turn-indicator">Ваш ход</div>
         <div id="move-controls" class="move-actions hidden">
             <button class="btn small" id="move-cancel">Отмена</button>
             <button class="btn small primary" id="move-ok">OK</button>
         </div>
+        <!-- Список игроков в игре -->
+        <div class="player-list" id="game-player-list"></div>
+        <!-- Результаты (скрыты пока нет победителя) -->
         <div id="game-result" class="result-table hidden"></div>
         <!-- Чат в игре -->
         <div id="game-chat-modal" class="chat-modal hidden">
@@ -631,7 +600,13 @@
             gameEnded = false;
             if (name === 'game') {
                 document.getElementById('game-result').classList.add('hidden');
-                document.getElementById('turn-order-panel').classList.remove('hidden');
+                document.getElementById('game-player-list').classList.remove('hidden');
+            }
+            if (name === 'lobby') {
+                // При показе лобби сразу грузим комнаты, если активна панель join
+                if (!document.getElementById('join-panel').classList.contains('hidden')) {
+                    send({ type: 'get_rooms' });
+                }
             }
         }
         
@@ -676,15 +651,16 @@
                 gameEnded = false;
                 showScreen('game');
                 document.getElementById('game-room-name').innerText = payload.roomName || '';
+                updateGamePlayerList(payload.players);
                 renderGame();
-                renderTurnOrder();
             } else if(type === 'game_update') {
                 gameState = payload;
+                updateGamePlayerList(payload.players);
                 renderGame();
-                renderTurnOrder();
-                if(gameState.winner) {
+                if(payload.winner) {
                     gameEnded = true;
-                    showGameResult();
+                    showGameResult(payload.winner, payload.scores, payload.participatingTeams);
+                    document.getElementById('game-player-list').classList.add('hidden');
                 }
             } else if(type === 'chat_message') {
                 addChatMessage(payload);
@@ -704,9 +680,7 @@
                     const btn = document.createElement('button');
                     btn.className = 'btn small';
                     btn.textContent = text;
-                    btn.addEventListener('click', () => {
-                        send({ type: 'chat_message', payload: { text } });
-                    });
+                    btn.addEventListener('click', () => send({ type: 'chat_message', payload: { text } }));
                     container.appendChild(btn);
                 });
             });
@@ -715,10 +689,7 @@
             document.getElementById('game-chat-btn').addEventListener('click', openChat);
             document.getElementById('close-chat').addEventListener('click', closeChat);
             document.getElementById('close-game-chat').addEventListener('click', closeChat);
-            
-            document.querySelectorAll('.chat-modal').forEach(m => m.addEventListener('click', (e) => {
-                if (e.target === m) closeChat();
-            }));
+            document.querySelectorAll('.chat-modal').forEach(m => m.addEventListener('click', (e) => { if (e.target === m) closeChat(); }));
         }
         
         function openChat() {
@@ -729,13 +700,11 @@
             updateChatBadge();
             renderChatMessages();
         }
-        
         function closeChat() {
             document.getElementById('chat-modal').classList.add('hidden');
             document.getElementById('game-chat-modal').classList.add('hidden');
             chatOpen = false;
         }
-        
         function addChatMessage({ senderId, senderNick, text, team }) {
             const isOwn = senderId === myPlayerId;
             chatMessages.push({ isOwn, senderNick, text, team });
@@ -744,7 +713,6 @@
             updateChatBadge();
             if (chatOpen) renderChatMessages();
         }
-        
         function renderChatMessages() {
             const msgDiv = currentScreen === 'room' ? 'chat-messages' : 'game-chat-messages';
             const container = document.getElementById(msgDiv);
@@ -753,40 +721,21 @@
                 const div = document.createElement('div');
                 div.className = `chat-message ${msg.isOwn ? 'own' : 'other'}`;
                 div.style.backgroundColor = getTeamColor(msg.team);
-                if (!msg.isOwn) {
-                    div.innerHTML = `<div class="chat-nick">${msg.senderNick}</div>${msg.text}`;
-                } else {
-                    div.textContent = msg.text;
-                }
+                if (!msg.isOwn) div.innerHTML = `<div class="chat-nick">${msg.senderNick}</div>${msg.text}`;
+                else div.textContent = msg.text;
                 container.appendChild(div);
             });
             container.scrollTop = container.scrollHeight;
         }
-        
         function updateChatBadge() {
             const badge = document.getElementById('chat-badge');
             const gameBadge = document.getElementById('game-chat-badge');
-            if (hasUnread) {
-                badge.classList.remove('hidden');
-                gameBadge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-                gameBadge.classList.add('hidden');
-            }
+            if (hasUnread) { badge.classList.remove('hidden'); gameBadge.classList.remove('hidden'); }
+            else { badge.classList.add('hidden'); gameBadge.classList.add('hidden'); }
         }
         
         // ---------- Список комнат ----------
-        let roomsListVisible = false;
-        document.getElementById('toggle-rooms-btn').addEventListener('click', (e) => {
-            e.preventDefault();
-            roomsListVisible = !roomsListVisible;
-            document.getElementById('rooms-list').classList.toggle('hidden', !roomsListVisible);
-            const btn = document.getElementById('toggle-rooms-btn');
-            btn.innerHTML = roomsListVisible ? 'Комнаты онлайн ▲' : 'Комнаты онлайн ▼';
-            if (roomsListVisible) send({ type: 'get_rooms' });
-        });
         document.getElementById('refresh-rooms-btn').addEventListener('click', () => send({ type: 'get_rooms' }));
-        
         function renderRoomsList(rooms) {
             const listDiv = document.getElementById('rooms-list');
             listDiv.innerHTML = '';
@@ -800,10 +749,7 @@
                 if (room.players >= room.maxSlots) div.classList.add('disabled');
                 div.innerHTML = `<span>${room.name} (${room.mode})</span><span>${room.players}/${room.maxSlots}</span>`;
                 div.addEventListener('click', () => {
-                    if (room.players >= room.maxSlots) {
-                        alert('Комната заполнена');
-                        return;
-                    }
+                    if (room.players >= room.maxSlots) { alert('Комната заполнена'); return; }
                     document.getElementById('join-room-name').value = room.name;
                     send({ type:'check_room', payload: { roomName: room.name } });
                 });
@@ -811,7 +757,7 @@
             });
         }
         
-        // ---------- Остальной код ----------
+        // ---------- UI комнаты / игры ----------
         function updateRoomUI(room) {
             document.getElementById('room-title').innerText = room.name;
             const maxSlots = { '1x1':2, '2x2':4, '3x3':9 }[room.mode];
@@ -838,6 +784,34 @@
             });
         }
         
+        function updateGamePlayerList(players) {
+            const listDiv = document.getElementById('game-player-list');
+            listDiv.innerHTML = '';
+            const teams = { X:[], O:[], T:[] };
+            Object.values(players).forEach(p => { if (p.online !== false) teams[p.team].push(p); });
+            // также показываем отключенных (зачёркнутых)
+            const offlinePlayers = Object.values(players).filter(p => p.online === false);
+            ['X','O','T'].forEach(team => {
+                const allTeam = [...teams[team], ...offlinePlayers.filter(p=>p.team===team)];
+                if (allTeam.length === 0) return;
+                const teamDiv = document.createElement('div');
+                teamDiv.style.margin = '8px 0 4px';
+                teamDiv.style.display = 'flex';
+                teamDiv.style.alignItems = 'center';
+                teamDiv.style.gap = '8px';
+                teamDiv.innerHTML = `<span style="color:${getTeamColor(team)}; font-weight:bold;">${getTeamName(team)}</span> ${getTeamIcon(team)}`;
+                listDiv.appendChild(teamDiv);
+                allTeam.forEach(p => {
+                    const div = document.createElement('div');
+                    div.className = 'player-item';
+                    if (p.id === gameState?.turnPlayer) div.classList.add('current-turn');
+                    const nickClass = p.online === false ? 'player-nick offline' : 'player-nick';
+                    div.innerHTML = `<span class="${nickClass}">${p.nick}</span><span class="player-team-icon">${getTeamIcon(team)}</span>`;
+                    listDiv.appendChild(div);
+                });
+            });
+        }
+        
         function updateJoinTeamSelector(roomInfo) {
             const container = document.getElementById('join-team-selector');
             container.innerHTML = '';
@@ -848,9 +822,7 @@
             if (mode === '1x1' || mode === '2x2') {
                 const fullTeams = Object.entries(occupied).filter(([_,c])=>c===maxPerTeam).map(([t])=>t);
                 const startedTeams = Object.entries(occupied).filter(([_,c])=>c>0).map(([t])=>t);
-                if (fullTeams.length === 1 && startedTeams.length >= 2) {
-                    availableTeams = startedTeams;
-                }
+                if (fullTeams.length === 1 && startedTeams.length >= 2) availableTeams = startedTeams;
             }
             availableTeams.forEach(t => {
                 const div = document.createElement('div');
@@ -858,12 +830,10 @@
                 div.dataset.team = t;
                 div.innerHTML = getTeamIcon(t);
                 if(occupied[t] >= maxPerTeam) div.classList.add('disabled');
-                else {
-                    div.addEventListener('click', ()=>{
-                        container.querySelectorAll('.team-option').forEach(o=>o.classList.remove('selected'));
-                        div.classList.add('selected');
-                    });
-                }
+                else div.addEventListener('click', ()=>{
+                    container.querySelectorAll('.team-option').forEach(o=>o.classList.remove('selected'));
+                    div.classList.add('selected');
+                });
                 container.appendChild(div);
             });
         }
@@ -900,12 +870,12 @@
                 createTabBtn.classList.remove('primary');
                 joinTabBtn.classList.add('primary');
                 document.getElementById('join-team-selector').innerHTML = '';
+                send({ type: 'get_rooms' });
             }
         }
         
         let selectedCell = null;
         let cellSize = 50;
-        
         function renderGame() {
             if(!gameState) return;
             const boardSize = gameState.boardSize || 9;
@@ -923,12 +893,11 @@
             for(let y=0;y<boardSize;y++) for(let x=0;x<boardSize;x++) {
                 const cell = board[y][x];
                 if(!cell) continue;
-                const cx = x*cellSize + cellSize/2;
-                const cy = y*cellSize + cellSize/2;
+                const cx = x*cellSize + cellSize/2, cy = y*cellSize + cellSize/2;
                 const size = cellSize * 0.6;
                 if(cell === 'X') drawCross(cx, cy, getTeamColor('X'), size);
                 else if(cell === 'O') drawCircle(cx, cy, getTeamColor('O'), size);
-                else if(cell === 'T') drawTriangle(cx, cy, getTeamColor('T'), size);
+                else drawTriangle(cx, cy, getTeamColor('T'), size);
             }
             ctx.lineWidth = Math.max(4, cellSize/8);
             ctx.strokeStyle = '#f0e68c';
@@ -943,8 +912,7 @@
             if(!gameEnded && gameState.currentTurn === myTeam && gameState.turnPlayer === myPlayerId && selectedCell) {
                 const {x,y} = selectedCell;
                 if(!gameState.blockedCells || !gameState.blockedCells[`${x},${y}`]) {
-                    const cx = x*cellSize + cellSize/2;
-                    const cy = y*cellSize + cellSize/2;
+                    const cx = x*cellSize + cellSize/2, cy = y*cellSize + cellSize/2;
                     ctx.globalAlpha = 0.5;
                     const size = cellSize * 0.6;
                     if(myTeam==='X') drawCross(cx,cy,getTeamColor('X'), size);
@@ -957,7 +925,6 @@
             document.getElementById('turn-indicator').innerText = isMyTurn ? 'Ваш ход' : (gameEnded ? 'Игра завершена' : 'Ход оппонента');
             document.getElementById('move-controls').classList.toggle('hidden', !isMyTurn || !selectedCell);
         }
-        
         function drawCross(cx,cy,color,size){
             ctx.strokeStyle=color; ctx.lineWidth=Math.max(3, size/8);
             ctx.beginPath(); ctx.moveTo(cx-size/2, cy-size/2); ctx.lineTo(cx+size/2, cy+size/2);
@@ -971,47 +938,19 @@
             ctx.strokeStyle=color; ctx.lineWidth=Math.max(3, size/8);
             ctx.beginPath(); ctx.moveTo(cx, cy-size/2); ctx.lineTo(cx+size/2, cy+size/3); ctx.lineTo(cx-size/2, cy+size/3); ctx.closePath(); ctx.stroke();
         }
-        
-        function renderTurnOrder() {
-            if (!gameState || !gameState.turnOrder) return;
-            const panel = document.getElementById('turn-order-panel');
-            const to = gameState.turnOrder;
-            const teams = to.teams;
-            let html = '';
-            // Для каждой команды показываем игроков
-            teams.forEach(team => {
-                const players = to.teamPlayers[team] || [];
-                const playerNicks = players.map(pid => {
-                    const p = gameState.players ? gameState.players[pid] : null;
-                    return p ? p.nick : pid;
-                });
-                html += `<div class="turn-team-row">`;
-                html += `<span style="color:${getTeamColor(team)}; font-weight:bold;">${getTeamName(team)} ${getTeamIcon(team)}</span>`;
-                playerNicks.forEach((nick, idx) => {
-                    const isCurrent = (team === gameState.currentTurn && players[idx] === gameState.turnPlayer);
-                    html += `<span class="turn-player ${isCurrent ? 'current' : ''}">${nick}</span>`;
-                });
-                html += `</div>`;
-            });
-            panel.innerHTML = html;
-        }
-        
-        function showGameResult() {
+        function showGameResult(winner, scores, teams) {
             const resultDiv = document.getElementById('game-result');
             resultDiv.classList.remove('hidden');
-            const scores = gameState.scores;
-            const teams = Object.keys(scores).filter(t => scores[t] !== undefined);
             let html = '';
             teams.forEach(team => {
-                html += `<div class="result-row"><div class="result-team">${getTeamIcon(team)} ${getTeamName(team)}</div><div class="result-score">${scores[team]}</div></div>`;
+                html += `<div class="result-row"><div class="result-team" style="color:${getTeamColor(team)};">${getTeamIcon(team)} ${getTeamName(team)}</div><div class="result-score">${scores[team]||0}</div></div>`;
             });
-            if(gameState.winner === 'draw') html += '<div style="text-align:center; margin-top:10px;">Ничья!</div>';
-            else html += `<div style="text-align:center; margin-top:10px;">Победитель: <span style="display:inline-flex;align-items:center;gap:4px;">${getTeamName(gameState.winner)} ${getTeamIcon(gameState.winner)}</span></div>`;
+            if (winner === 'draw') html += '<div style="text-align:center; margin-top:10px;">Ничья!</div>';
+            else html += `<div style="text-align:center; margin-top:10px; color:${getTeamColor(winner)}; font-weight:bold;">Победитель: ${getTeamName(winner)}</div>`;
             resultDiv.innerHTML = html;
-            if(gameState.winner !== 'draw' && gameState.winner === myTeam) addWin(selectedMode);
-            else if(gameState.winner !== 'draw') addLoss(selectedMode);
+            if (winner !== 'draw' && winner === myTeam) addWin(selectedMode);
+            else if (winner !== 'draw') addLoss(selectedMode);
         }
-        
         function renderTeamSelector(containerId) {
             const container = document.getElementById(containerId);
             container.innerHTML = '';
@@ -1028,23 +967,18 @@
             });
         }
         
-        // Инициализация
-        document.getElementById('play-btn').addEventListener('click', ()=>{
-            showScreen('lobby');
-            setLobbyTab('create');
-        });
+        // Инициализация обработчиков
+        document.getElementById('play-btn').addEventListener('click', ()=> { setLobbyTab('create'); showScreen('lobby'); });
         document.getElementById('stats-btn').addEventListener('click', ()=> document.getElementById('stats-panel').classList.toggle('hidden'));
         document.getElementById('lobby-back').addEventListener('click', ()=> showScreen('menu'));
         document.getElementById('create-room-tab').addEventListener('click', ()=> setLobbyTab('create'));
         document.getElementById('join-room-tab').addEventListener('click', ()=> setLobbyTab('join'));
         document.getElementById('create-mode-select').addEventListener('change', updateBoardSizeOptions);
-        
         document.getElementById('check-room-btn').addEventListener('click', ()=>{
             const name = document.getElementById('join-room-name').value.trim();
             if(!name) return alert('Введите название');
             send({ type:'check_room', payload: { roomName: name } });
         });
-        
         document.getElementById('confirm-create').addEventListener('click', ()=>{
             const roomName = document.getElementById('create-room-name').value.trim();
             if(!roomName) return alert('Введите название');
@@ -1057,7 +991,6 @@
             selectedMode = mode;
             send({ type:'create', payload:{ mode, roomName, team: selected.dataset.team, boardSize, nick:nickname } });
         });
-        
         document.getElementById('confirm-join').addEventListener('click', ()=>{
             const roomName = document.getElementById('join-room-name').value.trim();
             if(!roomName) return alert('Введите название');
@@ -1067,14 +1000,10 @@
             localStorage.setItem('nick', nickname);
             send({ type:'join', payload:{ roomName, team: selected.dataset.team, nick:nickname } });
         });
-        
         document.getElementById('room-leave').addEventListener('click', ()=> { if(confirm('Выйти?')) { send({type:'leave_room'}); showScreen('lobby'); } });
         document.getElementById('room-leave-btn').addEventListener('click', ()=> { if(confirm('Выйти?')) { send({type:'leave_room'}); showScreen('lobby'); } });
         document.getElementById('room-ready-btn').addEventListener('click', ()=> send({ type:'toggle_ready' }));
-        document.getElementById('game-leave').addEventListener('click', ()=>{
-            if(confirm('Покинуть игру?')) { send({type:'leave_game'}); showScreen('menu'); }
-        });
-        
+        document.getElementById('game-leave').addEventListener('click', ()=> { if(confirm('Покинуть игру?')) { send({type:'leave_game'}); showScreen('menu'); } });
         canvas.addEventListener('click', (e) => {
             if(gameEnded || !gameState || gameState.currentTurn !== myTeam || gameState.turnPlayer !== myPlayerId) return;
             const rect = canvas.getBoundingClientRect();
@@ -1089,13 +1018,8 @@
             selectedCell = {x,y};
             renderGame();
         });
-        
         document.getElementById('move-ok').addEventListener('click', ()=>{
-            if(selectedCell) {
-                send({ type:'make_move', payload: selectedCell });
-                selectedCell = null;
-                renderGame();
-            }
+            if(selectedCell) { send({ type:'make_move', payload: selectedCell }); selectedCell = null; renderGame(); }
         });
         document.getElementById('move-cancel').addEventListener('click', ()=>{ selectedCell = null; renderGame(); });
         
