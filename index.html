@@ -8,7 +8,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Triangle</title>
     <style>
-        /* предыдущие стили остаются без изменений */
         * {
             box-sizing: border-box;
             user-select: none;
@@ -162,37 +161,50 @@
             max-height: 300px;
             overflow-y: auto;
         }
-        /* Сетка для игроков в комнате (колонки) */
+        /* Список в комнате (старый стиль) */
+        .team-header {
+            margin: 8px 0 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: bold;
+        }
+        /* Сетка для игроков в игре (колонки без названий команд) */
         .players-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
+            gap: 0;
+            background: #191f2c;
+            border-radius: 28px;
+            padding: 4px 0;
         }
         .team-column {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            align-items: center;
+            padding: 8px 0;
+            border-right: 1px solid #3a4660;
         }
+        .team-column:last-child { border-right: none; }
         .team-column-header {
             display: flex;
-            align-items: center;
             justify-content: center;
-            gap: 6px;
             margin-bottom: 8px;
-            font-weight: bold;
         }
         .player-item {
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: center;
             padding: 6px 8px;
-            border-radius: 12px;
+            width: 100%;
         }
-        .player-nick { flex: 1; }
+        .player-nick { 
+            text-align: center;
+            word-break: break-word;
+        }
         .player-nick.offline { text-decoration: line-through; opacity: 0.7; }
-        .player-team-icon svg { width: 20px; height: 20px; vertical-align: middle; }
         .ready-badge {
-            margin-left: auto;
+            margin-left: 8px;
             color: #6fcf97;
             font-weight: bold;
             font-size: 1.2rem;
@@ -363,7 +375,7 @@
 </head>
 <body>
 <div id="app">
-    <!-- MENU SCREEN (без изменений) -->
+    <!-- МЕНЮ (без изменений) -->
     <div id="menu-screen" class="screen">
         <h1>▲ Triangle</h1>
         <div class="nickname-row">
@@ -378,7 +390,7 @@
         </div>
     </div>
 
-    <!-- LOBBY SCREEN (без изменений) -->
+    <!-- ЛОББИ (без изменений, кроме maxlength) -->
     <div id="lobby-screen" class="screen hidden">
         <div class="flex-row">
             <button class="back-btn" id="lobby-back">←</button>
@@ -390,7 +402,7 @@
         </div>
         <div id="create-panel">
             <div class="input-group">
-                <input type="text" id="create-room-name" placeholder="Название комнаты" maxlength="20">
+                <input type="text" id="create-room-name" placeholder="Название комнаты" maxlength="15">
             </div>
             <div class="input-group">
                 <select id="create-mode-select">
@@ -424,7 +436,7 @@
         </div>
     </div>
 
-    <!-- ROOM WAITING SCREEN (обновлён на грид) -->
+    <!-- КОМНАТА ОЖИДАНИЯ (возвращён старый список) -->
     <div id="room-screen" class="screen hidden">
         <div class="flex-row">
             <button class="back-btn" id="room-leave">←</button>
@@ -454,7 +466,7 @@
         </div>
     </div>
 
-    <!-- GAME SCREEN (обновлён на грид и подсветку цветом) -->
+    <!-- ИГРОВОЙ ЭКРАН (колонки без названий команд) -->
     <div id="game-screen" class="screen hidden">
         <div class="game-header">
             <button class="back-btn" id="game-leave">←</button>
@@ -474,7 +486,7 @@
             <button class="btn small" id="move-cancel">Отмена</button>
             <button class="btn small primary" id="move-ok">OK</button>
         </div>
-        <div class="player-list" id="game-player-list"></div>
+        <div id="game-player-list" class="players-grid"></div>
         <div id="game-result" class="result-table hidden"></div>
         <div id="game-chat-modal" class="chat-modal hidden">
             <div class="chat-container">
@@ -519,9 +531,10 @@
         let hasUnread = false;
         let chatOpen = false;
         let teamPreviews = {};
+        let currentPreviewKey = null; // ключ текущего превью союзника
         
         const chatPresets = [
-            "Быстрее", "Ну?", "Спокойнее", "Сейчас", "Подождите", "Минуту",
+            "Привет", "Быстрее", "Ну?", "Спокойнее", "Сейчас", "Подождите", "Минуту",
             "Красава", "Гадина", "Спасибо", "Сам(а)", "Гуд игра", "Бэд игра",
             "Повторим?", "Да", "Нет", "Не мой гендер", "Пока"
         ];
@@ -592,6 +605,7 @@
                 gameState = payload;
                 gameEnded = false;
                 teamPreviews = {};
+                currentPreviewKey = null;
                 showScreen('game');
                 document.getElementById('game-room-name').innerText = payload.roomName || '';
                 updateGamePlayerList(payload.players);
@@ -608,9 +622,17 @@
             } else if(type === 'preview_update') {
                 const { playerId, x, y } = payload;
                 if (playerId !== myPlayerId) {
-                    const key = `${x},${y}`;
-                    if (x === null) delete teamPreviews[key];
-                    else teamPreviews[key] = { playerId, team: myTeam };
+                    if (x === null) {
+                        teamPreviews = {};
+                        currentPreviewKey = null;
+                    } else {
+                        const newKey = `${x},${y}`;
+                        if (newKey !== currentPreviewKey) {
+                            teamPreviews = {};
+                            teamPreviews[newKey] = { playerId, team: myTeam };
+                            currentPreviewKey = newKey;
+                        }
+                    }
                     renderGame();
                 }
             } else if(type === 'chat_message') {
@@ -620,7 +642,7 @@
             }
         }
         
-        // Чат (без изменений)
+        // Чат
         function initChat() {
             renderChatMessages();
             const btnsContainer = document.getElementById('chat-buttons');
@@ -683,7 +705,7 @@
             else { badge.classList.add('hidden'); gameBadge.classList.add('hidden'); }
         }
         
-        // Комнаты (без изменений)
+        // Комнаты
         document.getElementById('refresh-rooms-btn').addEventListener('click', () => send({ type: 'get_rooms' }));
         function renderRoomsList(rooms) {
             const listDiv = document.getElementById('rooms-list');
@@ -706,64 +728,53 @@
             });
         }
         
-        // Комната ожидания – теперь с гридом
+        // Старый список для комнаты ожидания
         function updateRoomUI(room) {
             document.getElementById('room-title').innerText = room.name;
             const maxSlots = { '1x1':2, '2x2':4, '3x3':9 }[room.mode];
             document.getElementById('room-players-count').innerText = `${Object.keys(room.players).length}/${maxSlots}`;
             const listDiv = document.getElementById('room-player-list');
             listDiv.innerHTML = '';
-            const grid = document.createElement('div');
-            grid.className = 'players-grid';
-            const cols = { X: [], O: [], T: [] };
-            Object.values(room.players).forEach(p => cols[p.team].push(p));
-            
+            const teams = { X:[], O:[], T:[] };
+            Object.values(room.players).forEach(p => teams[p.team].push(p));
             ['X','O','T'].forEach(team => {
-                const col = document.createElement('div');
-                col.className = 'team-column';
+                if(teams[team].length === 0) return;
                 const header = document.createElement('div');
-                header.className = 'team-column-header';
+                header.className = 'team-header';
                 header.style.color = getTeamColor(team);
                 header.innerHTML = `${getTeamIcon(team)} ${getTeamName(team)}`;
-                col.appendChild(header);
-                
-                cols[team].forEach(p => {
+                listDiv.appendChild(header);
+                teams[team].forEach(p => {
                     const div = document.createElement('div');
                     div.className = 'player-item';
+                    div.style.justifyContent = 'flex-start';
                     div.innerHTML = `<span class="player-nick">${p.nick}</span>${p.ready ? '<span class="ready-badge">✓</span>' : ''}`;
-                    col.appendChild(div);
+                    listDiv.appendChild(div);
                 });
-                grid.appendChild(col);
             });
-            listDiv.appendChild(grid);
         }
         
-        // Отображение игроков в игре – колонки, подсветка текущего цветом
+        // Игровой список колонками, только иконки команд в шапке, отображаем только если есть игроки
         function updateGamePlayerList(players) {
-            const listDiv = document.getElementById('game-player-list');
-            listDiv.innerHTML = '';
-            const grid = document.createElement('div');
-            grid.className = 'players-grid';
+            const container = document.getElementById('game-player-list');
+            container.innerHTML = '';
             const cols = { X: [], O: [], T: [] };
             Object.values(players).forEach(p => { if (p.online !== false) cols[p.team].push(p); });
             const offline = Object.values(players).filter(p => p.online === false);
             
             ['X','O','T'].forEach(team => {
-                const col = document.createElement('div');
-                col.className = 'team-column';
+                const all = [...cols[team], ...offline.filter(p=>p.team===team)];
+                if (all.length === 0) return;
+                const colDiv = document.createElement('div');
+                colDiv.className = 'team-column';
                 const header = document.createElement('div');
                 header.className = 'team-column-header';
-                header.style.color = getTeamColor(team);
-                header.innerHTML = `${getTeamIcon(team)} ${getTeamName(team)}`;
-                col.appendChild(header);
-                
-                const allPlayers = [...cols[team], ...offline.filter(p=>p.team===team)];
-                allPlayers.forEach(p => {
+                header.innerHTML = getTeamIcon(team);
+                colDiv.appendChild(header);
+                all.forEach(p => {
                     const div = document.createElement('div');
                     div.className = 'player-item';
-                    if (p.id === gameState?.turnPlayer) {
-                        div.classList.add('current-turn');
-                    }
+                    if (p.id === gameState?.turnPlayer) div.classList.add('current-turn');
                     const nickSpan = document.createElement('span');
                     nickSpan.className = `player-nick${p.online === false ? ' offline' : ''}`;
                     nickSpan.textContent = p.nick;
@@ -771,11 +782,10 @@
                         nickSpan.style.color = getTeamColor(team);
                     }
                     div.appendChild(nickSpan);
-                    col.appendChild(div);
+                    colDiv.appendChild(div);
                 });
-                grid.appendChild(col);
+                container.appendChild(colDiv);
             });
-            listDiv.appendChild(grid);
         }
         
         function updateJoinTeamSelector(roomInfo) {
@@ -946,7 +956,7 @@
             });
         }
         
-        // Инициализация и обработчики (без изменений)
+        // Обработчики
         document.getElementById('play-btn').addEventListener('click', ()=> { setLobbyTab('create'); showScreen('lobby'); });
         document.getElementById('stats-btn').addEventListener('click', ()=> document.getElementById('stats-panel').classList.toggle('hidden'));
         document.getElementById('lobby-back').addEventListener('click', ()=> showScreen('menu'));
@@ -961,6 +971,7 @@
         document.getElementById('confirm-create').addEventListener('click', ()=>{
             const roomName = document.getElementById('create-room-name').value.trim();
             if(!roomName) return alert('Введите название');
+            if(roomName.length > 15) return alert('Название не более 15 символов');
             const selected = document.querySelector('#create-team-selector .team-option.selected');
             if(!selected) return alert('Выберите команду');
             const mode = document.getElementById('create-mode-select').value;
@@ -1004,6 +1015,7 @@
                 send({ type: 'preview_move', payload: { x: null, y: null } });
                 selectedCell = null;
                 teamPreviews = {};
+                currentPreviewKey = null;
                 renderGame();
             }
         });
@@ -1011,6 +1023,7 @@
             if (selectedCell) send({ type: 'preview_move', payload: { x: null, y: null } });
             selectedCell = null;
             teamPreviews = {};
+            currentPreviewKey = null;
             renderGame();
         });
         
