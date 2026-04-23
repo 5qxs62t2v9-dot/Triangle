@@ -65,7 +65,6 @@ function checkLines(board, blocked, boardSize) {
 }
 
 function buildRoundRobinQueue(teams, teamPlayers) {
-    // Создаём очередь вида: [X1, O1, T1, X2, O2, T2, X3, O3, T3]
     const queue = [];
     const maxPlayers = Math.max(...teams.map(t => teamPlayers[t].length));
     for (let i = 0; i < maxPlayers; i++) {
@@ -82,10 +81,9 @@ function nextTurn(room) {
     const queue = game.turnQueue;
     const currentIndex = queue.findIndex(item => item.playerId === game.turnPlayer);
     let nextIndex = (currentIndex + 1) % queue.length;
-    // Пропускаем отключенных игроков (но они остаются в очереди, их ход автоматически передаётся дальше)
     while (room.players[queue[nextIndex].playerId]?.online === false) {
         nextIndex = (nextIndex + 1) % queue.length;
-        if (nextIndex === currentIndex) break; // все оффлайн — маловероятно
+        if (nextIndex === currentIndex) break;
     }
     game.turnPlayer = queue[nextIndex].playerId;
     game.currentTurn = queue[nextIndex].team;
@@ -111,7 +109,7 @@ function startGame(room) {
         winner: null,
         roomName: room.name,
         boardSize,
-        players: room.players // для отправки на клиент
+        players: room.players
     };
     room.game = game;
     broadcastRoom(room.id, { type:'game_started', payload: game });
@@ -233,6 +231,18 @@ wss.on('connection', (ws) => {
         else if(type === 'leave_room') {
             handleLeaveRoom(ws);
         }
+        else if(type === 'preview_move') {
+            const room = rooms.get(ws.roomId);
+            if(!room || !room.game || room.game.winner) return;
+            const game = room.game;
+            if(game.currentTurn !== ws.playerData.team) return;
+            const { x, y } = payload;
+            wss.clients.forEach(client => {
+                if(client.roomId === ws.roomId && client.playerData && client.playerData.team === ws.playerData.team && client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({ type:'preview_update', payload: { playerId: ws.playerData.id, x, y } }));
+                }
+            });
+        }
         else if(type === 'make_move') {
             const room = rooms.get(ws.roomId);
             if(!room || !room.game || room.game.winner) return;
@@ -284,7 +294,7 @@ function handleLeaveRoom(ws) {
     if (ws.playerData) {
         const player = room.players[ws.playerData.id];
         if (player) {
-            if (room.game) player.online = false; // помечаем оффлайн
+            if (room.game) player.online = false;
             else delete room.players[ws.playerData.id];
         }
     }
