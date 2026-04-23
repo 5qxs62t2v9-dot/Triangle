@@ -8,6 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Triangle</title>
     <style>
+        /* предыдущие стили остаются без изменений */
         * {
             box-sizing: border-box;
             user-select: none;
@@ -107,20 +108,9 @@
         .btn:disabled { opacity: 0.5; transform: none; box-shadow: 0 4px 0 #121724; pointer-events: none; }
         .btn.primary { background: #5f7dcf; border-color: #a3bbff; }
         .btn.warning { background: #b55a5a; border-color: #e68a8a; }
-        .lobby-actions {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-        .lobby-actions .btn {
-            flex: 1;
-        }
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            margin: 10px 0;
-        }
+        .lobby-actions { display: flex; gap: 15px; flex-wrap: wrap; }
+        .lobby-actions .btn { flex: 1; }
+        .input-group { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
         input, select {
             background: #1b2233;
             border: 1px solid #4f6191;
@@ -158,10 +148,7 @@
             transition: 0.1s;
             min-width: 70px;
         }
-        .team-option svg {
-            width: 32px;
-            height: 32px;
-        }
+        .team-option svg { width: 32px; height: 32px; }
         .team-option.selected { border-color: #ffd966; background: #334十五; }
         .team-option.disabled {
             opacity: 0.4;
@@ -175,31 +162,40 @@
             max-height: 300px;
             overflow-y: auto;
         }
+        /* Сетка для игроков в комнате (колонки) */
+        .players-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+        .team-column {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .team-column-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
         .player-item {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 10px 12px;
-            border-bottom: 1px solid #334十五;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 12px;
         }
-        .player-item:last-child { border-bottom: none; }
-        .player-nick {
-            flex: 1;
-        }
-        .player-nick.offline {
-            text-decoration: line-through;
-            opacity: 0.7;
-        }
-        .player-team-icon svg {
-            width: 24px;
-            height: 24px;
-            vertical-align: middle;
-        }
+        .player-nick { flex: 1; }
+        .player-nick.offline { text-decoration: line-through; opacity: 0.7; }
+        .player-team-icon svg { width: 20px; height: 20px; vertical-align: middle; }
         .ready-badge {
             margin-left: auto;
             color: #6fcf97;
             font-weight: bold;
-            font-size: 1.3rem;
+            font-size: 1.2rem;
         }
         .game-header {
             display: flex;
@@ -236,10 +232,7 @@
             border-radius: 50%;
             border: 2px solid #1a1e2c;
         }
-        .game-canvas-container {
-            display: flex;
-            justify-content: center;
-        }
+        .game-canvas-container { display: flex; justify-content: center; }
         canvas {
             background: #111725;
             border-radius: 24px;
@@ -249,11 +242,7 @@
             touch-action: none;
         }
         .turn-indicator { display: none; }
-        .move-actions {
-            display: flex;
-            gap: 20px;
-            justify-content: center;
-        }
+        .move-actions { display: flex; gap: 20px; justify-content: center; }
         .stats {
             display: flex;
             justify-content: space-around;
@@ -262,16 +251,8 @@
             padding: 16px;
         }
         .hidden { display: none !important; }
-        .flex-row {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-        .action-buttons {
-            display: flex;
-            gap: 12px;
-            margin-top: 8px;
-        }
+        .flex-row { display: flex; gap: 12px; align-items: center; }
+        .action-buttons { display: flex; gap: 12px; margin-top: 8px; }
         .result-table {
             background: #1e2538;
             border-radius: 24px;
@@ -284,28 +265,12 @@
             justify-content: space-between;
             padding: 8px 0;
         }
-        .result-team {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .result-score {
-            font-size: 1.5rem;
-            font-weight: bold;
-        }
-        .board-size-selector {
-            margin: 12px 0;
-        }
-        .full-width {
-            width: 100%;
-        }
-        .room-actions {
-            display: flex;
-            gap: 15px;
-        }
-        .room-actions .btn {
-            flex: 1;
-        }
+        .result-team { display: flex; align-items: center; gap: 8px; }
+        .result-score { font-size: 1.5rem; font-weight: bold; }
+        .board-size-selector { margin: 12px 0; }
+        .full-width { width: 100%; }
+        .room-actions { display: flex; gap: 15px; }
+        .room-actions .btn { flex: 1; }
         /* Чат */
         .chat-modal {
             position: fixed;
@@ -344,12 +309,8 @@
             word-break: break-word;
             color: white;
         }
-        .chat-message.own {
-            align-self: flex-end;
-        }
-        .chat-message.other {
-            align-self: flex-start;
-        }
+        .chat-message.own { align-self: flex-end; }
+        .chat-message.other { align-self: flex-start; }
         .chat-nick {
             font-size: 0.8rem;
             opacity: 0.8;
@@ -365,18 +326,14 @@
             font-size: 0.9rem;
         }
         /* Список комнат */
-        .rooms-list-container {
-            margin-top: 10px;
-        }
+        .rooms-list-container { margin-top: 10px; }
         .rooms-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin-bottom: 8px;
         }
-        .rooms-header span {
-            font-weight: bold;
-        }
+        .rooms-header span { font-weight: bold; }
         .rooms-list {
             background: #151b26;
             border-radius: 20px;
@@ -398,16 +355,15 @@
         }
         .room-entry:last-child { border: none; }
         .room-entry:hover { background: #252e44; }
-        /* Выделение текущего игрока */
-        .current-turn {
-            border-bottom: 4px solid;
+        /* Текущий игрок */
+        .current-turn .player-nick {
             font-weight: bold;
         }
     </style>
 </head>
 <body>
 <div id="app">
-    <!-- MENU SCREEN -->
+    <!-- MENU SCREEN (без изменений) -->
     <div id="menu-screen" class="screen">
         <h1>▲ Triangle</h1>
         <div class="nickname-row">
@@ -422,7 +378,7 @@
         </div>
     </div>
 
-    <!-- LOBBY SCREEN -->
+    <!-- LOBBY SCREEN (без изменений) -->
     <div id="lobby-screen" class="screen hidden">
         <div class="flex-row">
             <button class="back-btn" id="lobby-back">←</button>
@@ -468,7 +424,7 @@
         </div>
     </div>
 
-    <!-- ROOM WAITING SCREEN -->
+    <!-- ROOM WAITING SCREEN (обновлён на грид) -->
     <div id="room-screen" class="screen hidden">
         <div class="flex-row">
             <button class="back-btn" id="room-leave">←</button>
@@ -498,7 +454,7 @@
         </div>
     </div>
 
-    <!-- GAME SCREEN -->
+    <!-- GAME SCREEN (обновлён на грид и подсветку цветом) -->
     <div id="game-screen" class="screen hidden">
         <div class="game-header">
             <button class="back-btn" id="game-leave">←</button>
@@ -664,7 +620,7 @@
             }
         }
         
-        // Чат
+        // Чат (без изменений)
         function initChat() {
             renderChatMessages();
             const btnsContainer = document.getElementById('chat-buttons');
@@ -679,7 +635,6 @@
                     container.appendChild(btn);
                 });
             });
-            
             document.getElementById('room-chat-btn').addEventListener('click', openChat);
             document.getElementById('game-chat-btn').addEventListener('click', openChat);
             document.getElementById('close-chat').addEventListener('click', closeChat);
@@ -728,7 +683,7 @@
             else { badge.classList.add('hidden'); gameBadge.classList.add('hidden'); }
         }
         
-        // Комнаты
+        // Комнаты (без изменений)
         document.getElementById('refresh-rooms-btn').addEventListener('click', () => send({ type: 'get_rooms' }));
         function renderRoomsList(rooms) {
             const listDiv = document.getElementById('rooms-list');
@@ -751,52 +706,76 @@
             });
         }
         
+        // Комната ожидания – теперь с гридом
         function updateRoomUI(room) {
             document.getElementById('room-title').innerText = room.name;
             const maxSlots = { '1x1':2, '2x2':4, '3x3':9 }[room.mode];
             document.getElementById('room-players-count').innerText = `${Object.keys(room.players).length}/${maxSlots}`;
             const listDiv = document.getElementById('room-player-list');
             listDiv.innerHTML = '';
-            const teams = { X:[], O:[], T:[] };
-            Object.values(room.players).forEach(p => teams[p.team].push(p));
+            const grid = document.createElement('div');
+            grid.className = 'players-grid';
+            const cols = { X: [], O: [], T: [] };
+            Object.values(room.players).forEach(p => cols[p.team].push(p));
+            
             ['X','O','T'].forEach(team => {
-                if(teams[team].length === 0) return;
-                const teamDiv = document.createElement('div');
-                teamDiv.style.margin = '8px 0 4px';
-                teamDiv.style.display = 'flex';
-                teamDiv.style.alignItems = 'center';
-                teamDiv.style.gap = '8px';
-                teamDiv.innerHTML = `<span style="color:${getTeamColor(team)}; font-weight:bold;">${getTeamName(team)}</span> ${getTeamIcon(team)}`;
-                listDiv.appendChild(teamDiv);
-                teams[team].forEach(p => {
+                const col = document.createElement('div');
+                col.className = 'team-column';
+                const header = document.createElement('div');
+                header.className = 'team-column-header';
+                header.style.color = getTeamColor(team);
+                header.innerHTML = `${getTeamIcon(team)} ${getTeamName(team)}`;
+                col.appendChild(header);
+                
+                cols[team].forEach(p => {
                     const div = document.createElement('div');
                     div.className = 'player-item';
-                    div.innerHTML = `<span class="player-nick">${p.nick}</span><span class="player-team-icon">${getTeamIcon(team)}</span>${p.ready ? '<span class="ready-badge">✓</span>' : ''}`;
-                    listDiv.appendChild(div);
+                    div.innerHTML = `<span class="player-nick">${p.nick}</span>${p.ready ? '<span class="ready-badge">✓</span>' : ''}`;
+                    col.appendChild(div);
                 });
+                grid.appendChild(col);
             });
+            listDiv.appendChild(grid);
         }
         
+        // Отображение игроков в игре – колонки, подсветка текущего цветом
         function updateGamePlayerList(players) {
             const listDiv = document.getElementById('game-player-list');
             listDiv.innerHTML = '';
-            const teams = { X:[], O:[], T:[] };
-            Object.values(players).forEach(p => { if (p.online !== false) teams[p.team].push(p); });
+            const grid = document.createElement('div');
+            grid.className = 'players-grid';
+            const cols = { X: [], O: [], T: [] };
+            Object.values(players).forEach(p => { if (p.online !== false) cols[p.team].push(p); });
             const offline = Object.values(players).filter(p => p.online === false);
+            
             ['X','O','T'].forEach(team => {
-                const all = [...teams[team], ...offline.filter(p=>p.team===team)];
-                all.forEach(p => {
+                const col = document.createElement('div');
+                col.className = 'team-column';
+                const header = document.createElement('div');
+                header.className = 'team-column-header';
+                header.style.color = getTeamColor(team);
+                header.innerHTML = `${getTeamIcon(team)} ${getTeamName(team)}`;
+                col.appendChild(header);
+                
+                const allPlayers = [...cols[team], ...offline.filter(p=>p.team===team)];
+                allPlayers.forEach(p => {
                     const div = document.createElement('div');
                     div.className = 'player-item';
                     if (p.id === gameState?.turnPlayer) {
                         div.classList.add('current-turn');
-                        div.style.borderBottomColor = getTeamColor(team);
                     }
-                    const nickClass = p.online === false ? 'player-nick offline' : 'player-nick';
-                    div.innerHTML = `<span class="${nickClass}">${p.nick}</span><span class="player-team-icon">${getTeamIcon(team)}</span>`;
-                    listDiv.appendChild(div);
+                    const nickSpan = document.createElement('span');
+                    nickSpan.className = `player-nick${p.online === false ? ' offline' : ''}`;
+                    nickSpan.textContent = p.nick;
+                    if (p.id === gameState?.turnPlayer) {
+                        nickSpan.style.color = getTeamColor(team);
+                    }
+                    div.appendChild(nickSpan);
+                    col.appendChild(div);
                 });
+                grid.appendChild(col);
             });
+            listDiv.appendChild(grid);
         }
         
         function updateJoinTeamSelector(roomInfo) {
@@ -896,7 +875,6 @@
                     ctx.stroke();
                 });
             }
-            // Свой предварительный ход
             if(!gameEnded && gameState.currentTurn === myTeam && gameState.turnPlayer === myPlayerId && selectedCell) {
                 const {x,y} = selectedCell;
                 if(!gameState.blockedCells || !gameState.blockedCells[`${x},${y}`]) {
@@ -909,7 +887,6 @@
                     ctx.globalAlpha = 1.0;
                 }
             }
-            // Предварительные ходы союзников
             if (!gameEnded && gameState.currentTurn === myTeam) {
                 Object.entries(teamPreviews).forEach(([key, info]) => {
                     if (info.playerId === myPlayerId) return;
@@ -969,6 +946,7 @@
             });
         }
         
+        // Инициализация и обработчики (без изменений)
         document.getElementById('play-btn').addEventListener('click', ()=> { setLobbyTab('create'); showScreen('lobby'); });
         document.getElementById('stats-btn').addEventListener('click', ()=> document.getElementById('stats-panel').classList.toggle('hidden'));
         document.getElementById('lobby-back').addEventListener('click', ()=> showScreen('menu'));
@@ -1005,7 +983,6 @@
         document.getElementById('room-leave-btn').addEventListener('click', ()=> { if(confirm('Выйти?')) { send({type:'leave_room'}); showScreen('lobby'); } });
         document.getElementById('room-ready-btn').addEventListener('click', ()=> send({ type:'toggle_ready' }));
         document.getElementById('game-leave').addEventListener('click', ()=> { if(confirm('Покинуть игру?')) { send({type:'leave_game'}); showScreen('menu'); } });
-        
         canvas.addEventListener('click', (e) => {
             if(gameEnded || !gameState || gameState.currentTurn !== myTeam || gameState.turnPlayer !== myPlayerId) return;
             const rect = canvas.getBoundingClientRect();
@@ -1031,9 +1008,7 @@
             }
         });
         document.getElementById('move-cancel').addEventListener('click', ()=>{
-            if (selectedCell) {
-                send({ type: 'preview_move', payload: { x: null, y: null } });
-            }
+            if (selectedCell) send({ type: 'preview_move', payload: { x: null, y: null } });
             selectedCell = null;
             teamPreviews = {};
             renderGame();
