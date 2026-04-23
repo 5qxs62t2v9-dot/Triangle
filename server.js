@@ -9,6 +9,7 @@ const rooms = new Map();
 
 function genId() { return Math.random().toString(36).substr(2, 8); }
 
+// Проверка на возможность собрать тройку
 function canAnyTeamFormLine(board, blocked, boardSize) {
     const teams = ['X','O','T'];
     const dirs = [[1,0],[0,1],[1,1],[1,-1]];
@@ -146,6 +147,20 @@ function getActiveRooms() {
     return active;
 }
 
+// Проверка возможности начать игру (равное количество в непустых командах)
+function canStartWithPlayers(room) {
+    const players = Object.values(room.players);
+    const counts = { X:0, O:0, T:0 };
+    players.forEach(p => counts[p.team]++);
+    const activeTeams = Object.entries(counts).filter(([_,c]) => c > 0);
+    if (activeTeams.length < 2) return false; // минимум две команды
+    const firstCount = activeTeams[0][1];
+    if (!activeTeams.every(([_,c]) => c === firstCount)) return false;
+    if (room.mode === '2x2' && activeTeams.length > 2) return false;
+    if (room.mode === '3x3' && activeTeams.length > 3) return false;
+    return true;
+}
+
 const server = http.createServer((req, res) => {
     if (req.url === '/' || req.url === '/index.html') {
         fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
@@ -171,7 +186,7 @@ wss.on('connection', (ws) => {
         if(type === 'create') {
             const { mode, roomName, team, boardSize, nick } = payload;
             if (boardSize === 9 && mode !== '1x1') {
-                return ws.send(JSON.stringify({ type:'error', payload:{message:'9x9 только в 1x1'} }));
+                return ws.send(JSON.stringify({ type:'error', payload:{message:'9x9 доступно только в 1x1'} }));
             }
             const roomId = genId();
             const room = {
@@ -201,17 +216,37 @@ wss.on('connection', (ws) => {
             const { roomName, team, nick } = payload;
             const room = [...rooms.values()].find(r => r.name === roomName && !r.game);
             if(!room) return ws.send(JSON.stringify({ type:'error', payload:{message:'Комната не найдена'} }));
-            const maxPerTeam = { '1x1':1, '2x2':2, '3x3':3 }[room.mode];
+            
+            const mode = room.mode;
+            const maxPerTeam = { '1x1':1, '2x2':2, '3x3':3 }[mode];
             const occupied = { X:0, O:0, T:0 };
             Object.values(room.players).forEach(p => occupied[p.team]++);
+            
+            // Определяем доступные команды с учётом ограничений
             let availableTeams = ['X','O','T'];
-            if (room.mode === '1x1' || room.mode === '2x2') {
-                const fullTeams = Object.entries(occupied).filter(([_,c])=>c===maxPerTeam).map(([t])=>t);
-                const startedTeams = Object.entries(occupied).filter(([_,c])=>c>0).map(([t])=>t);
-                if (fullTeams.length === 1 && startedTeams.length >= 2) availableTeams = startedTeams;
+            
+            // Логика для 2x2 и 1x1: если две команды уже "затронуты" (хотя бы один игрок),
+            // третья команда недоступна
+            if (mode === '2x2' || mode === '1x1') {
+                const teamsWithPlayers = Object.entries(occupied).filter(([_,c]) => c > 0).map(([t]) => t);
+                if (teamsWithPlayers.length >= 2) {
+                    // Оставляем только те команды, в которых уже есть игроки
+                    availableTeams = teamsWithPlayers;
+                }
+                // Для 1x1 максимум одна команда, другая обязательно
+                if (mode === '1x1' && teamsWithPlayers.length === 2) {
+                    // В 1x1 две команды уже заняты – третью нельзя
+                    availableTeams = teamsWithPlayers;
+                }
             }
-            if (!availableTeams.includes(team)) return ws.send(JSON.stringify({ type:'error', payload:{message:'Команда недоступна'} }));
-            if(occupied[team] >= maxPerTeam) return ws.send(JSON.stringify({ type:'error', payload:{message:'Команда заполнена'} }));
+            
+            if (!availableTeams.includes(team)) {
+                return ws.send(JSON.stringify({ type:'error', payload:{message:'Эта команда сейчас недоступна'} }));
+            }
+            if(occupied[team] >= maxPerTeam) {
+                return ws.send(JSON.stringify({ type:'error', payload:{message:'Команда заполнена'} }));
+            }
+            
             const playerId = genId();
             room.players[playerId] = { id: playerId, nick, team, ready: false, online: true };
             ws.roomId = room.id;
@@ -225,8 +260,11 @@ wss.on('connection', (ws) => {
             const player = room.players[ws.playerData.id];
             player.ready = !player.ready;
             broadcastRoom(ws.roomId, { type:'room_update', payload: getRoomPublic(room) });
-            const players = Object.values(room.players);
-            if(players.every(p=>p.ready) && players.length === room.maxSlots) startGame(room);
+            
+            const allReady = Object.values(room.players).every(p => p.ready);
+            if (allReady && canStartWithPlayers(room)) {
+                startGame(room);
+            }
         }
         else if(type === 'leave_room') {
             handleLeaveRoom(ws);
