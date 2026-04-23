@@ -5,12 +5,10 @@ const WebSocket = require('ws');
 
 const PORT = process.env.PORT || 8080;
 
-// Хранилище комнат
 const rooms = new Map();
 
 function genId() { return Math.random().toString(36).substr(2, 8); }
 
-// Проверка, можно ли ещё собрать тройку (любой командой)
 function canAnyTeamFormLine(board, blocked, boardSize) {
     const teams = ['X','O','T'];
     const dirs = [[1,0],[0,1],[1,1],[1,-1]];
@@ -74,21 +72,43 @@ function startGame(room) {
     const teamPlayers = {};
     teamsPresent.forEach(t => { teamPlayers[t] = players.filter(p=>p.team===t).map(p=>p.id); });
     
-    const boardSize = room.boardSize;
+    // Подготовка данных для панели очерёдности
+    const playersMap = {};
+    players.forEach(p => { playersMap[p.id] = p; });
+    
+    // Создаём последовательность ходов: все игроки всех команд в порядке X,O,T,
+    // затем снова первые игроки и т.д. (если разное количество игроков — как описано)
+    const turnOrderList = [];
+    const maxPlayersInTeam = Math.max(...teamsPresent.map(t => teamPlayers[t].length));
+    for (let round = 0; round < maxPlayersInTeam; round++) {
+        for (let team of teamsPresent) {
+            const playerId = teamPlayers[team][round];
+            if (playerId) {
+                turnOrderList.push({ team, playerId });
+            }
+        }
+    }
+    
     const game = {
-        board: Array(boardSize).fill().map(()=>Array(boardSize).fill(null)),
+        board: Array(room.boardSize).fill().map(()=>Array(room.boardSize).fill(null)),
         blockedCells: {},
         scores: { X:0, O:0, T:0 },
         lines: [],
         teams: teamsPresent,
         teamPlayers,
-        currentTeamIdx: 0,
-        playerIdx: 0,
-        currentTurn: teamsPresent[0],
-        turnPlayer: teamPlayers[teamsPresent[0]][0],
+        players: playersMap,
+        turnOrderList,
+        currentTurnIndex: 0,
+        currentTurn: turnOrderList[0].team,
+        turnPlayer: turnOrderList[0].playerId,
         winner: null,
         roomName: room.name,
-        boardSize
+        boardSize: room.boardSize,
+        // для отображения на клиенте
+        turnOrder: {
+            teams: teamsPresent,
+            teamPlayers
+        }
     };
     room.game = game;
     broadcastRoom(room.id, { type:'game_started', payload: game });
@@ -96,13 +116,10 @@ function startGame(room) {
 
 function advanceTurn(room) {
     const game = room.game;
-    const teams = game.teams;
-    const currentTeam = teams[game.currentTeamIdx];
-    game.playerIdx = (game.playerIdx + 1) % game.teamPlayers[currentTeam].length;
-    game.currentTeamIdx = (game.currentTeamIdx + 1) % teams.length;
-    const nextTeam = teams[game.currentTeamIdx];
-    game.currentTurn = nextTeam;
-    game.turnPlayer = game.teamPlayers[nextTeam][game.playerIdx];
+    game.currentTurnIndex = (game.currentTurnIndex + 1) % game.turnOrderList.length;
+    const next = game.turnOrderList[game.currentTurnIndex];
+    game.currentTurn = next.team;
+    game.turnPlayer = next.playerId;
 }
 
 function getRoomPublic(room) {
@@ -121,14 +138,12 @@ function broadcastRoom(roomId, message) {
     });
 }
 
-// Добавление сообщения в историю чата комнаты (храним не более 5)
 function addRoomChatMessage(room, senderId, senderNick, text, team) {
     if (!room.chatMessages) room.chatMessages = [];
     room.chatMessages.push({ senderId, senderNick, text, team, timestamp: Date.now() });
     if (room.chatMessages.length > 5) room.chatMessages.shift();
 }
 
-// Получение списка активных комнат (игра не начата)
 function getActiveRooms() {
     const active = [];
     for (let room of rooms.values()) {
@@ -177,7 +192,7 @@ wss.on('connection', (ws) => {
                 players: {},
                 maxSlots: { '1x1':2, '2x2':4, '3x3':9 }[mode],
                 game: null,
-                chatMessages: [] // история чата
+                chatMessages: []
             };
             const playerId = genId();
             room.players[playerId] = { id: playerId, nick, team, ready: false };
@@ -204,8 +219,8 @@ wss.on('connection', (ws) => {
             const occupied = { X:0, O:0, T:0 };
             Object.values(room.players).forEach(p => occupied[p.team]++);
             let availableTeams = ['X','O','T'];
-            if (room.mode === '2x2') {
-                const fullTeams = Object.entries(occupied).filter(([_,c])=>c===2).map(([t])=>t);
+            if (room.mode === '1x1' || room.mode === '2x2') {
+                const fullTeams = Object.entries(occupied).filter(([_,c])=>c===maxPerTeam).map(([t])=>t);
                 const startedTeams = Object.entries(occupied).filter(([_,c])=>c>0).map(([t])=>t);
                 if (fullTeams.length === 1 && startedTeams.length >= 2) {
                     availableTeams = startedTeams;
